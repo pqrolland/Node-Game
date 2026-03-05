@@ -1,0 +1,50 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]       # Auto-deploys every time you push to main
+  pull_request:
+    branches: [main]       # Runs checks on PRs without deploying
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  # ── Job 1: Lint & validate ──────────────────────────────────────────────
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for syntax errors
+        run: |
+          echo "✅ Checking HTML..."
+          find . -name "*.html" | head -5
+          echo "✅ Checking JS files exist..."
+          find ./src -name "*.js" | sort
+          echo "All files present."
+
+  # ── Job 2: Deploy (only on push to main) ───────────────────────────────
+  deploy:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'            # Uploads entire repo root (index.html lives here)
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

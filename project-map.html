@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>RTS Game — Project Map</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap');
+
+  :root {
+    --green: #44ff88;
+    --green-dim: #1a5c35;
+    --red: #ff4455;
+    --bg: #080f08;
+    --panel: #0d180d;
+    --border: #1e3a1e;
+    --text: #aaffcc;
+    --muted: #446644;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    padding: 32px 24px;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 39px, var(--border) 39px, var(--border) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, var(--border) 40px, var(--border) 40px);
+    background-size: 40px 40px;
+  }
+
+  h1 {
+    font-family: 'Orbitron', monospace;
+    color: var(--green);
+    font-size: 1.6rem;
+    letter-spacing: 4px;
+    text-align: center;
+    margin-bottom: 8px;
+    text-shadow: 0 0 20px var(--green);
+  }
+
+  .subtitle {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-bottom: 40px;
+    letter-spacing: 2px;
+  }
+
+  /* ── Main layout ── */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+    max-width: 1100px;
+    margin: 0 auto 40px;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: var(--green-dim);
+    transition: background 0.2s;
+  }
+  .card:hover {
+    border-color: var(--green);
+    box-shadow: 0 0 20px rgba(68,255,136,0.12);
+    transform: translateY(-2px);
+  }
+  .card:hover::before { background: var(--green); }
+  .card.active {
+    border-color: var(--green);
+    box-shadow: 0 0 28px rgba(68,255,136,0.2);
+  }
+  .card.active::before { background: var(--green); }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .icon { font-size: 1.4rem; }
+  .card-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.75rem;
+    color: var(--green);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .card-file {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-bottom: 10px;
+    padding: 4px 8px;
+    background: rgba(68,255,136,0.04);
+    border-radius: 2px;
+    border-left: 2px solid var(--green-dim);
+  }
+  .card-desc {
+    font-size: 0.75rem;
+    color: #7aaa8a;
+    line-height: 1.6;
+  }
+
+  /* ── Detail panel ── */
+  .detail {
+    max-width: 1100px;
+    margin: 0 auto 40px;
+    background: var(--panel);
+    border: 1px solid var(--green);
+    border-radius: 4px;
+    padding: 24px;
+    display: none;
+    animation: fadeIn 0.2s ease;
+  }
+  .detail.show { display: block; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .detail-title {
+    font-family: 'Orbitron', monospace;
+    color: var(--green);
+    font-size: 0.9rem;
+    letter-spacing: 3px;
+    margin-bottom: 16px;
+  }
+
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  .detail-section h3 {
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+
+  .tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag {
+    padding: 3px 10px;
+    border-radius: 2px;
+    font-size: 0.7rem;
+    border: 1px solid;
+  }
+  .tag.green  { color: var(--green);  border-color: var(--green-dim);  background: rgba(68,255,136,0.06); }
+  .tag.red    { color: var(--red);    border-color: #5c1a1a;           background: rgba(255,68,85,0.06); }
+  .tag.yellow { color: #ffcc44;       border-color: #5c4a00;           background: rgba(255,204,68,0.06); }
+
+  .step-list { list-style: none; }
+  .step-list li {
+    padding: 6px 0;
+    font-size: 0.75rem;
+    color: #7aaa8a;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+  }
+  .step-list li span.num {
+    color: var(--green);
+    min-width: 20px;
+  }
+
+  /* ── Pipeline flow ── */
+  .pipeline {
+    max-width: 1100px;
+    margin: 0 auto 40px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 24px;
+  }
+  .pipeline-title {
+    font-family: 'Orbitron', monospace;
+    color: var(--green);
+    font-size: 0.75rem;
+    letter-spacing: 3px;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .pipeline-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .pipe-step {
+    text-align: center;
+    padding: 14px 20px;
+    background: rgba(68,255,136,0.04);
+    border: 1px solid var(--green-dim);
+    border-radius: 3px;
+    min-width: 120px;
+  }
+  .pipe-step .p-icon { font-size: 1.4rem; margin-bottom: 6px; }
+  .pipe-step .p-name { font-size: 0.65rem; color: var(--green); letter-spacing: 1px; text-transform: uppercase; }
+  .pipe-step .p-sub  { font-size: 0.6rem; color: var(--muted); margin-top: 3px; }
+  .pipe-arrow {
+    color: var(--green-dim);
+    font-size: 1.4rem;
+    padding: 0 6px;
+    flex-shrink: 0;
+  }
+
+  .next-steps {
+    max-width: 1100px;
+    margin: 0 auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 24px;
+  }
+  .next-steps h2 {
+    font-family: 'Orbitron', monospace;
+    color: var(--green);
+    font-size: 0.75rem;
+    letter-spacing: 3px;
+    margin-bottom: 16px;
+  }
+  .step-checklist { list-style: none; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .step-checklist li {
+    font-size: 0.73rem;
+    color: #7aaa8a;
+    padding: 10px 12px;
+    background: rgba(68,255,136,0.03);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .step-checklist li .check { color: var(--green-dim); flex-shrink: 0; }
+  .step-checklist li b { color: var(--text); display: block; margin-bottom: 2px; }
+</style>
+</head>
+<body>
+
+<h1>⚔ RTS GAME SCAFFOLD</h1>
+<p class="subtitle">CLICK ANY MODULE TO EXPLORE · PHASER 3 + GITHUB ACTIONS</p>
+
+<div class="grid" id="cards"></div>
+<div class="detail" id="detail"></div>
+
+<div class="pipeline">
+  <div class="pipeline-title">▶ CI/CD PIPELINE — PUSH TO DEPLOY</div>
+  <div class="pipeline-flow">
+    <div class="pipe-step"><div class="p-icon">📝</div><div class="p-name">Write Code</div><div class="p-sub">VS Code</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step"><div class="p-icon">📤</div><div class="p-name">git push</div><div class="p-sub">to main</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step"><div class="p-icon">⚙️</div><div class="p-name">GitHub Actions</div><div class="p-sub">auto-triggers</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step"><div class="p-icon">✅</div><div class="p-name">Lint Check</div><div class="p-sub">validate files</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step"><div class="p-icon">🚀</div><div class="p-name">Deploy</div><div class="p-sub">GitHub Pages</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step"><div class="p-icon">🌐</div><div class="p-name">Live URL</div><div class="p-sub">yourname.github.io/rts</div></div>
+  </div>
+</div>
+
+<div class="next-steps">
+  <h2>⬡ NEXT STEPS — IN ORDER</h2>
+  <ul class="step-checklist" id="steps"></ul>
+</div>
+
+<script>
+const modules = [
+  {
+    icon: '🗂',
+    title: 'Entry Point',
+    file: 'index.html',
+    desc: 'Loads Phaser from CDN. No npm install needed.',
+    tags: ['HTML', 'Phaser CDN', 'No build step'],
+    tagTypes: ['green','green','yellow'],
+    steps: [
+      'Loads style.css for base layout',
+      'Imports Phaser 3.60 from jsDelivr CDN',
+      'Loads src/main.js as an ES module'
+    ],
+    note: 'Open this file with VS Code Live Server to start developing.'
+  },
+  {
+    icon: '⚙',
+    title: 'Game Config',
+    file: 'src/main.js',
+    desc: 'Phaser config. Sets resolution, physics, and scene order.',
+    tags: ['1280×720', 'Arcade Physics', 'WebGL/Canvas'],
+    tagTypes: ['green','green','yellow'],
+    steps: [
+      'Imports all 3 scenes (Boot, Game, UI)',
+      'Configures Phaser with 1280×720 canvas',
+      'Enables Arcade physics for unit movement',
+      'Starts the scene pipeline automatically'
+    ],
+    note: 'Change width/height here to resize the game canvas.'
+  },
+  {
+    icon: '⬇',
+    title: 'Boot Scene',
+    file: 'src/scenes/BootScene.js',
+    desc: 'Asset preloader. Shows loading bar, then launches GameScene.',
+    tags: ['Preloader', 'Loading Bar', 'Asset Comments'],
+    tagTypes: ['yellow','yellow','green'],
+    steps: [
+      'Draws a loading progress bar',
+      'All asset load() calls go here (sprites, maps, audio)',
+      'Auto-transitions to GameScene when done'
+    ],
+    note: 'Uncomment the load.image() lines as you add sprite assets.'
+  },
+  {
+    icon: '🎮',
+    title: 'Game Scene',
+    file: 'src/scenes/GameScene.js',
+    desc: 'Core game loop. Camera, input, unit spawning, drag-select.',
+    tags: ['Camera Scroll', 'Drag Select', 'Right-click Move', 'Grid Map'],
+    tagTypes: ['green','green','green','yellow'],
+    steps: [
+      'Draws a 2560×1440 grid background',
+      'Spawns 3 player units + 1 enemy',
+      'WASD/Arrows scroll the camera',
+      'Scroll wheel zooms in/out',
+      'Left-drag draws a green selection box',
+      'Right-click moves selected units in formation'
+    ],
+    note: 'This is where most of your game logic will live.'
+  },
+  {
+    icon: '🖥',
+    title: 'UI Scene',
+    file: 'src/scenes/UIScene.js',
+    desc: 'HUD overlay. Runs parallel to GameScene — always on top.',
+    tags: ['HUD', 'Selection Count', 'Resource Bar'],
+    tagTypes: ['green','green','yellow'],
+    steps: [
+      'Renders a bottom bar with dark background',
+      'Shows how many units are selected',
+      'Displays placeholder resource counter',
+      'Shows keyboard controls hint'
+    ],
+    note: 'Wire resource display to Supabase when you add the backend.'
+  },
+  {
+    icon: '🪖',
+    title: 'Unit Class',
+    file: 'src/units/Unit.js',
+    desc: 'Individual unit. Renders as triangle, moves toward target.',
+    tags: ['Physics Body', 'Formation Move', 'Selection Ring', 'Team Color'],
+    tagTypes: ['green','green','green','yellow'],
+    steps: [
+      'Extends Phaser Container (body + ring grouped)',
+      'Green triangle = player, red = enemy',
+      'moveTo(x,y) sets a movement target',
+      'update() steers toward target each frame',
+      'setSelected() toggles white ring visibility',
+      'Rotates to face movement direction'
+    ],
+    note: 'Swap triangle graphics for a spritesheet when you have art.'
+  },
+  {
+    icon: '🔄',
+    title: 'CI/CD Pipeline',
+    file: '.github/workflows/deploy.yml',
+    desc: 'Auto-deploys to GitHub Pages on every push to main.',
+    tags: ['GitHub Actions', 'GitHub Pages', 'Free Hosting'],
+    tagTypes: ['green','green','green'],
+    steps: [
+      'Triggers on push to main branch',
+      'Job 1: validates all files exist',
+      'Job 2: deploys to GitHub Pages (only on main)',
+      'Live URL: yourname.github.io/rts-game'
+    ],
+    note: 'Enable Pages in repo Settings → Pages → Source → GitHub Actions.'
+  },
+  {
+    icon: '📁',
+    title: 'Assets Folder',
+    file: 'assets/{sprites,maps,audio}/',
+    desc: 'Empty folders ready for your art, tilemaps, and audio.',
+    tags: ['Sprites', 'Tiled Maps', 'Audio'],
+    tagTypes: ['yellow','yellow','yellow'],
+    steps: [
+      'assets/sprites/ — unit & building spritesheets',
+      'assets/maps/ — Tiled editor JSON exports',
+      'assets/audio/ — WAV/OGG sound effects & music',
+      'Load them in BootScene.js preload()'
+    ],
+    note: 'Tiled (free) is the recommended map editor for Phaser tilemaps.'
+  },
+];
+
+const nextSteps = [
+  { label: 'First thing', title: 'Run it', desc: 'Open index.html with VS Code Live Server extension' },
+  { label: 'GitHub', title: 'Create repo', desc: 'Push this folder — pipeline auto-activates' },
+  { label: 'GitHub', title: 'Enable Pages', desc: 'Settings → Pages → Source → GitHub Actions' },
+  { label: 'Art', title: 'Add sprites', desc: 'Drop PNGs in assets/sprites/, load in BootScene' },
+  { label: 'Map', title: 'Build a tilemap', desc: 'Use Tiled editor, export JSON to assets/maps/' },
+  { label: 'Later', title: 'Add Supabase', desc: 'Player accounts, save games, leaderboards' },
+];
+
+let activeIdx = null;
+
+const cardsEl = document.getElementById('cards');
+const detailEl = document.getElementById('detail');
+
+modules.forEach((m, i) => {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-header">
+      <span class="icon">${m.icon}</span>
+      <span class="card-title">${m.title}</span>
+    </div>
+    <div class="card-file">${m.file}</div>
+    <div class="card-desc">${m.desc}</div>
+  `;
+  card.addEventListener('click', () => {
+    if (activeIdx === i) {
+      activeIdx = null;
+      detailEl.classList.remove('show');
+      card.classList.remove('active');
+      return;
+    }
+    document.querySelectorAll('.card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+    activeIdx = i;
+
+    const tags = m.tags.map((t, ti) => `<span class="tag ${m.tagTypes[ti]}">${t}</span>`).join('');
+    const steps = m.steps.map((s, si) => `<li><span class="num">${si+1}.</span>${s}</li>`).join('');
+    detailEl.innerHTML = `
+      <div class="detail-title">${m.icon} ${m.title.toUpperCase()} — ${m.file}</div>
+      <div class="detail-grid">
+        <div class="detail-section">
+          <h3>What it does</h3>
+          <ul class="step-list">${steps}</ul>
+        </div>
+        <div class="detail-section">
+          <h3>Tags</h3>
+          <div class="tag-list" style="margin-bottom:16px">${tags}</div>
+          <h3>Dev note</h3>
+          <p style="font-size:0.75rem;color:#7aaa8a;line-height:1.6">${m.note}</p>
+        </div>
+      </div>
+    `;
+    detailEl.classList.add('show');
+    detailEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  cardsEl.appendChild(card);
+});
+
+const stepsEl = document.getElementById('steps');
+nextSteps.forEach(s => {
+  const li = document.createElement('li');
+  li.innerHTML = `<span class="check">☐</span><div><b>${s.title}</b>${s.desc}</div>`;
+  li.style.cursor = 'pointer';
+  li.addEventListener('click', () => {
+    li.querySelector('.check').textContent =
+      li.querySelector('.check').textContent === '☐' ? '✅' : '☐';
+  });
+  stepsEl.appendChild(li);
+});
+</script>
+</body>
+</html>
