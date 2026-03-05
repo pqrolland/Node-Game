@@ -1,21 +1,13 @@
 /**
  * Unit.js — A stack of units that travels node-to-node along graph edges.
  *
- * Key behaviours:
- *  - Sits on a node at rest
- *  - Given a path (array of nodeIds), travels each edge in sequence
- *  - Smooth real-time glide between nodes
- *  - Friendly stacks can share a node; enemy stacks trigger combat on arrival
- *  - Visually shows unit count badge and selection ring
+ * Visual changes:
+ *  - Unit body circle is removed — ownership is shown on the planet itself
+ *  - Stack badge floats ABOVE the node in a coloured rectangle (player colour)
+ *  - Badge moves with the unit while travelling between nodes
  */
 export default class Unit extends Phaser.GameObjects.Container {
 
-  /**
-   * @param {Phaser.Scene} scene
-   * @param {object}       startNode  - node object { id, x, y }
-   * @param {string}       team       - 'player' | 'enemy'
-   * @param {number}       stackSize  - number of units in this stack
-   */
   constructor(scene, startNode, team = 'player', stackSize = 5) {
     super(scene, startNode.x, startNode.y);
 
@@ -28,25 +20,29 @@ export default class Unit extends Phaser.GameObjects.Container {
     this.isSelected  = false;
     this.isMoving    = false;
 
-    const bodyColor   = team === 'player' ? 0x44ff88 : 0xff4455;
-    const borderColor = team === 'player' ? 0x22aa55 : 0xaa2233;
+    // Team colours
+    this.teamColor     = team === 'player' ? 0x44aaff : 0xff4455;
+    this.teamColorHex  = team === 'player' ? '#44aaff' : '#ff4455';
 
-    // Body
-    this.bodyGfx = scene.add.graphics();
-    this.bodyGfx.fillStyle(bodyColor, 1);
-    this.bodyGfx.fillCircle(0, 0, 16);
-    this.bodyGfx.lineStyle(2, borderColor, 1);
-    this.bodyGfx.strokeCircle(0, 0, 16);
-    this.add(this.bodyGfx);
+    // ── Badge: coloured rectangle + black unit count, floats above node ───
+    const BADGE_W = 28, BADGE_H = 16, BADGE_Y = -28;
 
-    // Stack-size badge
-    this.badge = scene.add.text(0, 0, String(stackSize), {
-      font: 'bold 12px monospace',
-      color: team === 'player' ? '#003311' : '#330011',
+    this.badgeBg = scene.add.graphics();
+    this._drawBadgeBg(BADGE_W, BADGE_H, BADGE_Y);
+    this.add(this.badgeBg);
+
+    this.badge = scene.add.text(0, BADGE_Y, String(stackSize), {
+      font:  'bold 11px monospace',
+      color: '#000000',
     }).setOrigin(0.5, 0.5);
     this.add(this.badge);
 
-    // Selection ring
+    // Store badge dimensions for redraw
+    this._badgeW = BADGE_W;
+    this._badgeH = BADGE_H;
+    this._badgeY = BADGE_Y;
+
+    // ── Selection ring (white, around where the node is) ──────────────────
     this.ring = scene.add.graphics();
     this.ring.lineStyle(2, 0xffffff, 0.9);
     this.ring.strokeCircle(0, 0, 22);
@@ -57,7 +53,14 @@ export default class Unit extends Phaser.GameObjects.Container {
     this.setDepth(10);
   }
 
-  /** Assign a full path (array of nodeIds). Unit starts moving immediately. */
+  _drawBadgeBg(w, h, y) {
+    this.badgeBg.clear();
+    this.badgeBg.fillStyle(this.teamColor, 1);
+    this.badgeBg.fillRoundedRect(-w / 2, y - h / 2, w, h, 3);
+    // Small pointer triangle pointing down toward the node
+    this.badgeBg.fillTriangle(-4, y + h / 2, 4, y + h / 2, 0, y + h / 2 + 5);
+  }
+
   assignPath(nodeIds) {
     if (!nodeIds || nodeIds.length < 2) return;
     this.path = nodeIds.slice(1);
@@ -71,13 +74,14 @@ export default class Unit extends Phaser.GameObjects.Container {
 
   updateBadge() {
     this.badge.setText(String(this.stackSize));
+    // Widen badge if number grows
+    const newW = Math.max(28, this.badge.width + 10);
+    if (newW !== this._badgeW) {
+      this._badgeW = newW;
+      this._drawBadgeBg(this._badgeW, this._badgeH, this._badgeY);
+    }
   }
 
-  /**
-   * Call from scene's update(). Moves unit along current edge.
-   * @param {Map} nodeMap - Map<id, {x,y}>
-   * @param {number} delta - ms since last frame
-   */
   update(nodeMap, delta) {
     if (!this.isMoving || !this.targetNode) return;
 
@@ -96,9 +100,7 @@ export default class Unit extends Phaser.GameObjects.Container {
       this.targetNode  = null;
       this.isMoving    = false;
 
-      // Notify scene — handles combat / arrival logic
       this.scene.events.emit('unitArrivedAtNode', this, this.currentNode);
-
       if (this.path.length > 0) this._advanceToNextNode();
     } else {
       this.x += (dx / dist) * step;

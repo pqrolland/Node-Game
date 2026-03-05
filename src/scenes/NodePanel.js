@@ -52,12 +52,12 @@ export default class NodePanel extends Phaser.Scene {
     this.root.add(overlay);
 
     // ── Panel background ───────────────────────────────────────────────────
-    const bg = this.add.rectangle(0, this.PANEL_Y, width, this.PANEL_H, 0x080f08, 0.97)
+    const bg = this.add.rectangle(0, this.PANEL_Y, width, this.PANEL_H, 0x080c14, 0.97)
       .setOrigin(0, 0);
     this.root.add(bg);
 
     // Top border line
-    const topLine = this.add.rectangle(0, this.PANEL_Y, width, 2, 0x44ff88, 0.6)
+    const topLine = this.add.rectangle(0, this.PANEL_Y, width, 2, 0x2255aa, 0.8)
       .setOrigin(0, 0);
     this.root.add(topLine);
 
@@ -89,7 +89,7 @@ export default class NodePanel extends Phaser.Scene {
 
     // Section header
     const header = this.add.text(x, y, 'UNIT MANAGEMENT', {
-      font: 'bold 11px monospace', color: '#44ff88'
+      font: 'bold 11px monospace', color: '#44aaff'
     });
     this.root.add(header);
 
@@ -119,24 +119,24 @@ export default class NodePanel extends Phaser.Scene {
     this.root.add(this.btnPlus);
 
     // Split & move button
-    this.btnSplitMove = this._makeButton(x, y + 100, '  SPLIT & MOVE  ', () => this._doSplit(), 0x1a3a1a, 0x44ff88);
+    this.btnSplitMove = this._makeButton(x, y + 100, '  SPLIT & MOVE  ', () => this._doSplit(), 0x0d1e3a, 0x44ff88);
     this.root.add(this.btnSplitMove);
 
     // Split hint text
     this.splitHint = this.add.text(x, y + 130, 'Select a destination node after splitting', {
-      font: '10px monospace', color: '#446644'
+      font: '10px monospace', color: '#223366'
     });
     this.root.add(this.splitHint);
 
     // ── Reserved space label ───────────────────────────────────────────────
     this.add.text(x, y + 155, '[ More unit options coming soon ]', {
-      font: '10px monospace', color: '#2a3a2a'
+      font: '10px monospace', color: '#1a2a44'
     });
     // Note: this.add directly (not via root) is fine for static placeholder text
     // that is always visible regardless of panel state — but here we want it hidden,
     // so we add to root:
     const placeholder = this.add.text(x, y + 155, '[ More unit options coming soon ]', {
-      font: '10px monospace', color: '#2a3a2a'
+      font: '10px monospace', color: '#1a2a44'
     });
     this.root.add(placeholder);
   }
@@ -157,13 +157,13 @@ export default class NodePanel extends Phaser.Scene {
 
     // Node type badge (dynamic)
     this.nodeType = this.add.text(x, y + 24, '', {
-      font: '11px monospace', color: '#44ff88'
+      font: '11px monospace', color: '#44aaff'
     });
     this.root.add(this.nodeType);
 
     // ── Attributes header ──────────────────────────────────────────────────
     const attrHeader = this.add.text(x, y + 46, 'ATTRIBUTES', {
-      font: 'bold 10px monospace', color: '#558855'
+      font: 'bold 10px monospace', color: '#4477aa'
     });
     this.root.add(attrHeader);
 
@@ -191,7 +191,7 @@ export default class NodePanel extends Phaser.Scene {
       this.root.add(lbl);
 
       // Bar background (empty track)
-      const track = this.add.rectangle(barX, rowY + 2, barW, barH, 0x1a2a1a, 1)
+      const track = this.add.rectangle(barX, rowY + 2, barW, barH, 0x0d1a2e, 1)
         .setOrigin(0, 0);
       this.root.add(track);
 
@@ -213,12 +213,12 @@ export default class NodePanel extends Phaser.Scene {
     // ── Reserved space for buildings ───────────────────────────────────────
     const buildingY = y + 160;
     const bldPlaceholder = this.add.text(x, buildingY, 'BUILDINGS', {
-      font: 'bold 10px monospace', color: '#558855'
+      font: 'bold 10px monospace', color: '#4477aa'
     });
     this.root.add(bldPlaceholder);
 
     const bldSub = this.add.text(x, buildingY + 16, '[ Building slots coming soon ]', {
-      font: '10px monospace', color: '#2a3a2a'
+      font: '10px monospace', color: '#1a2a44'
     });
     this.root.add(bldSub);
   }
@@ -267,7 +267,7 @@ export default class NodePanel extends Phaser.Scene {
 
     if (this.activeStacks.length === 0) {
       const empty = this.add.text(x, y, 'No friendly units at this node', {
-        font: '11px monospace', color: '#446644'
+        font: '11px monospace', color: '#223366'
       });
       this.stackListContainer.add(empty);
       this.splitLabel.setVisible(false);
@@ -293,7 +293,7 @@ export default class NodePanel extends Phaser.Scene {
       // Highlight selected stack
       const isSelected = i === 0; // Default to first stack
       const bg = this.add.rectangle(x - 4, rowY - 2, 220, 18,
-        isSelected ? 0x1a3a1a : 0x0d180d, 1).setOrigin(0, 0);
+        isSelected ? 0x0d1e3a : 0x0d180d, 1).setOrigin(0, 0);
 
       const txt = this.add.text(x, rowY,
         `▶ Stack ${i + 1}  —  ${stack.stackSize} units  [${stack.isMoving ? 'Moving' : 'Idle'}]`, {

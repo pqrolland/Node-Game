@@ -8,7 +8,7 @@ const config = {
   width: 1280,
   height: 720,
   parent: 'game-container',
-  backgroundColor: '#0d1a0d',
+  backgroundColor: '#080c14',
   // Scenes run in order — later scenes render ON TOP of earlier ones
   scene: [BootScene, GameScene, UIScene, NodePanel],
 };

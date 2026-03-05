@@ -10,19 +10,32 @@ export default class GameScene extends Phaser.Scene {
     this.units              = [];
     this.pendingSplitStack  = null;
     this.nodePanelOpen      = false;
+    this.nodeOwnership      = new Map();  // nodeId → team string | null
+    this.resources          = { food: 0, metal: 0, fuel: 0 };
+    this.resourceTickTimer  = 0;
+    this.RESOURCE_TICK_MS   = 3000;  // 3 seconds
   }
 
   create() {
     NODES.forEach(n => this.nodeMap.set(n.id, n));
     this.adjacency = buildAdjacency(EDGES);
 
-    this.mapGfx = this.add.graphics();
+    // Assign planet types randomly each playthrough
+    const PLANET_TYPES = ['molten', 'habitable', 'barren', 'sulfuric'];
+    this.nodeMap.forEach(node => {
+      node.type = PLANET_TYPES[Math.floor(Math.random() * PLANET_TYPES.length)];
+    });
+
+    this.mapGfx      = this.add.graphics();
+    this.ownershipGfx = this.add.graphics().setDepth(4);  // above map, below units
     this.drawMap();
 
-    this.spawnStack('E', 'player', 8);
-    this.spawnStack('F', 'player', 3);
-    this.spawnStack('D', 'enemy',  6);
-    this.spawnStack('L', 'enemy',  4);
+    // Spawn on first and last nodes of the spiral
+    const nodeIds = Array.from(this.nodeMap.keys());
+    this.spawnStack(nodeIds[0], 'player', 8);
+    this.spawnStack(nodeIds[1], 'player', 3);
+    this.spawnStack(nodeIds[nodeIds.length - 1], 'enemy', 6);
+    this.spawnStack(nodeIds[nodeIds.length - 2], 'enemy', 4);
 
     // Invisible click zones over each node
     NODES.forEach(node => {
@@ -36,7 +49,14 @@ export default class GameScene extends Phaser.Scene {
 
     this.events.on('unitArrivedAtNode', this.handleArrival, this);
 
-    this.cameras.main.setBounds(0, 0, 1280, 720);
+    // UI bar is 80px tall — extend the map bounds downward by that amount
+    // so the camera can scroll down far enough to bring bottom nodes
+    // up above the UI bar.
+    const UI_BAR_H = 80;
+    // Large bounds so player can scroll to any node when zoomed in
+    this.cameras.main.setBounds(-640, -360, 2560, 1440 + UI_BAR_H);
+    // Centre camera on the middle of the map (where spiral is centred)
+    this.cameras.main.centerOn(640, 360);
     this.cursors = this.input.keyboard.createCursorKeys();
     // { capture: false } means Phaser won't stopPropagation on these keys,
     // so they keep working even when other scenes are running on top.
@@ -72,6 +92,7 @@ export default class GameScene extends Phaser.Scene {
   update(time, delta) {
     this.handleCameraScroll();
     this.units.forEach(u => u.update(this.nodeMap, delta));
+    this._tickResources(delta);
   }
 
   // ── Map rendering ──────────────────────────────────────────────────────
@@ -80,11 +101,22 @@ export default class GameScene extends Phaser.Scene {
     const g = this.mapGfx;
     g.clear();
 
-    g.fillStyle(0x0d1a0d, 1);
-    g.fillRect(0, 0, 1280, 720);
+    // Fill well beyond map bounds so zoom-out never shows engine background
+    g.fillStyle(0x080c14, 1);
+    g.fillRect(-1280, -720, 3840, 2160);
+
+    // Star field — covers full extended background
+    for (let i = 0; i < 400; i++) {
+      const sx = Math.floor(Math.random() * 2560) - 640;
+      const sy = Math.floor(Math.random() * 1440) - 360;
+      const brightness = Math.random();
+      const starColor = brightness > 0.8 ? 0xffffff : brightness > 0.5 ? 0xaabbdd : 0x445566;
+      g.fillStyle(starColor, brightness * 0.8 + 0.2);
+      g.fillRect(sx, sy, 1, 1);
+    }
 
     // Edges / paths
-    g.lineStyle(3, 0x2a4a2a, 1);
+    g.lineStyle(2, 0x1a2a44, 1);
     EDGES.forEach(({ from, to }) => {
       const a = this.nodeMap.get(from);
       const b = this.nodeMap.get(to);
@@ -94,24 +126,81 @@ export default class GameScene extends Phaser.Scene {
     // Nodes
     NODES.forEach(node => {
       const color  = this.nodeColor(node.type);
-      const radius = node.type === 'fort' ? 14 : 11;
+      const radius = node.type === 'molten' ? 14 : 11;
 
-      g.fillStyle(0x0d1a0d, 1);
+      g.fillStyle(0x080c14, 1);
       g.fillCircle(node.x, node.y, radius + 3);
       g.fillStyle(color, 1);
       g.fillCircle(node.x, node.y, radius);
-      g.lineStyle(2, 0x88ffaa, 0.3);
+      g.lineStyle(2, 0x4488cc, 0.4);
       g.strokeCircle(node.x, node.y, radius);
 
       this.add.text(node.x, node.y + radius + 10, node.label, {
         font: '11px monospace',
-        color: '#66aa77',
+        color: '#7799bb',
       }).setOrigin(0.5, 0).setDepth(6);
     });
   }
 
+  teamColor(team) {
+    return { player: 0x44aaff, enemy: 0xff4455 }[team] || 0x888888;
+  }
+
+  // ── Ownership ──────────────────────────────────────────────────────────
+
+  // Recalculates who owns each node based on which team has the most units there.
+  // A node is owned by the last team to have had majority — once claimed it stays
+  // claimed until another team gains majority.
+  updateOwnership(nodeId) {
+    const stacks = this.units.filter(u => u.currentNode === nodeId && !u.isMoving);
+
+    // Tally units per team at this node
+    const tally = {};
+    stacks.forEach(u => {
+      tally[u.team] = (tally[u.team] || 0) + u.stackSize;
+    });
+
+    const teams = Object.entries(tally);
+    if (teams.length === 0) {
+      // No units — ownership stays with whoever last held it (don't clear)
+    } else {
+      // Team with most units takes ownership; ties don't change ownership
+      teams.sort((a, b) => b[1] - a[1]);
+      if (teams.length === 1 || teams[0][1] > teams[1][1]) {
+        this.nodeOwnership.set(nodeId, teams[0][0]);
+      }
+    }
+
+    this.drawOwnershipRings();
+  }
+
+  drawOwnershipRings() {
+    const g = this.ownershipGfx;
+    g.clear();
+
+    this.nodeOwnership.forEach((team, nodeId) => {
+      if (!team) return;
+      const node   = this.nodeMap.get(nodeId);
+      if (!node) return;
+      const radius = node.type === 'molten' ? 14 : 11;
+      const color  = this.teamColor(team);
+
+      // Outer glow ring
+      g.lineStyle(3, color, 0.5);
+      g.strokeCircle(node.x, node.y, radius + 6);
+      // Inner ownership ring
+      g.lineStyle(2, color, 0.9);
+      g.strokeCircle(node.x, node.y, radius + 3);
+    });
+  }
+
   nodeColor(type) {
-    return { fort: 0x8844aa, town: 0x4488ff, junction: 0x447744, resource: 0xffaa22 }[type] || 0x448844;
+    return {
+      molten:   0xff5522,  // Volcanic orange-red
+      habitable: 0x44aaff, // Cool blue — life-sustaining
+      barren:   0x888899,  // Dusty grey
+      sulfuric: 0xccdd22,  // Toxic yellow-green
+    }[type] || 0x556677;
   }
 
   // ── Spawning ───────────────────────────────────────────────────────────
@@ -120,6 +209,10 @@ export default class GameScene extends Phaser.Scene {
     const node = this.nodeMap.get(nodeId);
     const unit = new Unit(this, node, team, size);
     this.units.push(unit);
+    this.nodeOwnership.set(nodeId, team);
+    this.drawOwnershipRings();
+    // HUD update deferred — UIScene may not be launched yet during create()
+    this.time && this.time.delayedCall(100, () => this.updateHUD());
     return unit;
   }
 
@@ -200,14 +293,14 @@ export default class GameScene extends Phaser.Scene {
     const path = findPath(this.selectedStack.currentNode, nodeId, this.adjacency);
     if (!path) return;
 
-    this.previewGfx.lineStyle(2, 0x44ff88, 0.5);
+    this.previewGfx.lineStyle(2, 0x44aaff, 0.5);
     for (let i = 0; i < path.length - 1; i++) {
       const a = this.nodeMap.get(path[i]);
       const b = this.nodeMap.get(path[i + 1]);
       this.previewGfx.lineBetween(a.x, a.y, b.x, b.y);
     }
     const dest = this.nodeMap.get(nodeId);
-    this.previewGfx.lineStyle(2, 0x44ff88, 0.8);
+    this.previewGfx.lineStyle(2, 0x44aaff, 0.8);
     this.previewGfx.strokeCircle(dest.x, dest.y, 28);
   }
 
@@ -225,6 +318,8 @@ export default class GameScene extends Phaser.Scene {
       }
     });
 
+    this.updateOwnership(nodeId);
+    this.updateHUD();
     this.scene.get('UIScene').logEvent(
       unit.team === 'player'
         ? `Stack arrived at ${this.nodeMap.get(nodeId).label}`
@@ -236,6 +331,8 @@ export default class GameScene extends Phaser.Scene {
     arriving.stackSize += stationary.stackSize;
     arriving.updateBadge();
     this.removeStack(stationary);
+    this.updateOwnership(arriving.currentNode);
+    this.updateHUD();
     this.scene.get('UIScene').logEvent(
       `Stacks merged — now ${arriving.stackSize} units`
     );
@@ -255,6 +352,8 @@ export default class GameScene extends Phaser.Scene {
     // Exact tie — both destroyed
     if (winner.stackSize <= 0) this.removeStack(winner);
 
+    this.updateOwnership(winner.currentNode);
+    this.updateHUD();
     this.scene.get('UIScene').logEvent(
       `⚔ Combat! ${winner.team === 'player' ? 'Player' : 'Enemy'} wins with ${winner.stackSize} remaining`
     );
@@ -286,6 +385,50 @@ export default class GameScene extends Phaser.Scene {
     this.units = this.units.filter(u => u !== unit);
     if (this.selectedStack === unit) this.deselectAll();
     unit.destroy();
+    this.updateHUD();
+  }
+
+  // ── Resource tick ─────────────────────────────────────────────────────
+
+  _tickResources(delta) {
+    this.resourceTickTimer += delta;
+    if (this.resourceTickTimer < this.RESOURCE_TICK_MS) return;
+    this.resourceTickTimer -= this.RESOURCE_TICK_MS;
+
+    // Sum resources from every planet owned by 'player'
+    this.nodeOwnership.forEach((team, nodeId) => {
+      if (team !== 'player') return;
+      const node = this.nodeMap.get(nodeId);
+      if (!node) return;
+      this.resources.food  += node.food  || 0;
+      this.resources.metal += node.metal || 0;
+      this.resources.fuel  += node.fuel  || 0;
+    });
+
+    this.updateHUD();
+  }
+
+  // Recalculates planet count + total units and pushes everything to UIScene
+  updateHUD() {
+    const ui = this.scene.get('UIScene');
+    if (!ui) return;
+
+    // Planet count — nodes owned by player
+    const planetCount = Array.from(this.nodeOwnership.values())
+      .filter(t => t === 'player').length;
+
+    // Total player units across all stacks
+    const totalUnits = this.units
+      .filter(u => u.team === 'player')
+      .reduce((sum, u) => sum + u.stackSize, 0);
+
+    ui.updatePlayerInfo('Player 1', planetCount);
+    ui.updateResources({
+      units: totalUnits,
+      food:  this.resources.food,
+      metal: this.resources.metal,
+      fuel:  this.resources.fuel,
+    });
   }
 
   // ── Camera ─────────────────────────────────────────────────────────────
