@@ -14,6 +14,8 @@ export default class GameScene extends Phaser.Scene {
     this.resources          = { food: 0, metal: 0, fuel: 0 };
     this.resourceTickTimer  = 0;
     this.RESOURCE_TICK_MS   = 3000;  // 3 seconds
+    this.unitProduction     = new Map(); // nodeId → { elapsed, duration, arcG }
+    this._CARD_W            = 108; // matches CARD_W in NodePanel
   }
 
   create() {
@@ -24,6 +26,13 @@ export default class GameScene extends Phaser.Scene {
     const PLANET_TYPES = ['molten', 'habitable', 'barren', 'sulfuric'];
     this.nodeMap.forEach(node => {
       node.type = PLANET_TYPES[Math.floor(Math.random() * PLANET_TYPES.length)];
+    });
+
+    // Snapshot base resource values before any buildings apply bonuses
+    this.nodeMap.forEach(node => {
+      node.baseFood  = node.food;
+      node.baseMetal = node.metal;
+      node.baseFuel  = node.fuel;
     });
 
     this.mapGfx      = this.add.graphics();
@@ -83,6 +92,19 @@ export default class GameScene extends Phaser.Scene {
     // Listen for split requests from NodePanel
     this.game.events.on('splitStack', this.handleSplit, this);
 
+    // Listen for building additions — apply bonuses to node resource values
+    this.game.events.on('buildingAdded', ({ nodeId, bldId }) => {
+      this.handleBuildingAdded(nodeId, bldId);
+    });
+
+    // Deduct resources when a building is queued
+    this.game.events.on('deductResources', ({ food, metal, fuel }) => {
+      this.resources.food  = Math.max(0, this.resources.food  - (food  || 0));
+      this.resources.metal = Math.max(0, this.resources.metal - (metal || 0));
+      this.resources.fuel  = Math.max(0, this.resources.fuel  - (fuel  || 0));
+      this.updateHUD();
+    });
+
     // Track whether the node panel is open so clicks behave differently
     this.nodePanelOpen = false;
     this.game.events.on('openNode',  () => { this.nodePanelOpen = true; });
@@ -93,6 +115,7 @@ export default class GameScene extends Phaser.Scene {
     this.handleCameraScroll();
     this.units.forEach(u => u.update(this.nodeMap, delta));
     this._tickResources(delta);
+    this._tickUnitProduction(delta);
   }
 
   // ── Map rendering ──────────────────────────────────────────────────────
@@ -388,6 +411,35 @@ export default class GameScene extends Phaser.Scene {
     this.updateHUD();
   }
 
+  // ── Buildings ─────────────────────────────────────────────────────────
+
+  handleBuildingAdded(nodeId, bldId) {
+    const node = this.nodeMap.get(nodeId);
+    if (!node) return;
+
+    // Import bonuses from building definition
+    // We inline the bonuses here to avoid a circular import with NodePanel
+    const BONUSES = {
+      farm:             { food:  1 },
+      metal_extractor:  { metal: 1 },
+      fuel_extractor:   { fuel:  1 },
+      naval_base:       {},
+    };
+
+    const bonus = BONUSES[bldId] || {};
+    Object.entries(bonus).forEach(([res, val]) => {
+      node[res] = (node[res] || 0) + val;
+    });
+
+    // Naval Base: start unit production timer for this node
+    if (bldId === 'naval_base' && !this.unitProduction.has(nodeId)) {
+      this.unitProduction.set(nodeId, { elapsed: 0, duration: 15000, arcG: null });
+    }
+
+    // Notify NodePanel to refresh its resource display
+    this.game.events.emit('nodeResourcesUpdated', nodeId);
+  }
+
   // ── Resource tick ─────────────────────────────────────────────────────
 
   _tickResources(delta) {
@@ -408,27 +460,92 @@ export default class GameScene extends Phaser.Scene {
     this.updateHUD();
   }
 
+  _tickUnitProduction(delta) {
+    this.unitProduction.forEach((prod, nodeId) => {
+      // Only produce for player-owned nodes
+      if (this.nodeOwnership.get(nodeId) !== 'player') return;
+
+      prod.elapsed += delta;
+
+      // Refresh arc in NodePanel if it's showing this node
+      if (prod.arcG && !prod.arcG.destroyed) {
+        const progress = Math.min(prod.elapsed / prod.duration, 1);
+        prod.arcG.clear();
+        prod.arcG.lineStyle(3, 0x1a2a44, 1);
+        prod.arcG.beginPath();
+        prod.arcG.arc(this._CARD_W - 12, 12, 7, 0, Math.PI * 2);
+        prod.arcG.strokePath();
+        if (progress > 0) {
+          prod.arcG.lineStyle(3, 0x44aaff, 1);
+          prod.arcG.beginPath();
+          prod.arcG.arc(this._CARD_W - 12, 12, 7, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+          prod.arcG.strokePath();
+        }
+        prod.arcG.fillStyle(0x44aaff, 0.9);
+        prod.arcG.fillCircle(this._CARD_W - 12, 12, 3);
+      }
+
+      if (prod.elapsed >= prod.duration) {
+        prod.elapsed -= prod.duration;
+
+        // Add one unit to the largest friendly stack at this node, or spawn new
+        const node   = this.nodeMap.get(nodeId);
+        const stacks = this.units.filter(u => u.team === 'player' && u.currentNode === nodeId && !u.isMoving);
+        if (stacks.length > 0) {
+          stacks.sort((a, b) => b.stackSize - a.stackSize);
+          stacks[0].stackSize++;
+          stacks[0].updateBadge();
+        } else if (node) {
+          // Spawn a new stack of 1 — pass node object as Unit constructor expects
+          const newUnit = new Unit(this, node, 'player', 1);
+          this.units.push(newUnit);
+        }
+        this.updateHUD();
+      }
+    });
+  }
+
   // Recalculates planet count + total units and pushes everything to UIScene
   updateHUD() {
     const ui = this.scene.get('UIScene');
     if (!ui) return;
 
-    // Planet count — nodes owned by player
-    const planetCount = Array.from(this.nodeOwnership.values())
-      .filter(t => t === 'player').length;
+    // Planet count + type distribution for owned planets
+    const typeCounts = { molten: 0, habitable: 0, barren: 0, sulfuric: 0 };
+    let planetCount  = 0;
+    this.nodeOwnership.forEach((team, nodeId) => {
+      if (team !== 'player') return;
+      planetCount++;
+      const node = this.nodeMap.get(nodeId);
+      if (node && typeCounts[node.type] !== undefined) typeCounts[node.type]++;
+    });
 
     // Total player units across all stacks
     const totalUnits = this.units
       .filter(u => u.team === 'player')
       .reduce((sum, u) => sum + u.stackSize, 0);
 
-    ui.updatePlayerInfo('Player 1', planetCount);
+    // Build per-planet breakdown for tooltip
+    const breakdown = [];
+    this.nodeOwnership.forEach((team, nodeId) => {
+      if (team !== 'player') return;
+      const node = this.nodeMap.get(nodeId);
+      if (!node) return;
+      breakdown.push({
+        label: node.label,
+        food:  node.food  || 0,
+        metal: node.metal || 0,
+        fuel:  node.fuel  || 0,
+      });
+    });
+
+    ui.updatePlayerInfo('Player 1', planetCount, typeCounts);
     ui.updateResources({
       units: totalUnits,
       food:  this.resources.food,
       metal: this.resources.metal,
       fuel:  this.resources.fuel,
-    });
+    }, breakdown);
   }
 
   // ── Camera ─────────────────────────────────────────────────────────────

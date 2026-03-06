@@ -1,12 +1,18 @@
 export default class UIScene extends Phaser.Scene {
   constructor() {
     super({ key: 'UIScene' });
-    this.eventLog = [];
+    this.eventLog    = [];
+    this.playerName  = 'Player 1';
+    this.planetCount = 0;
+    this.resources   = { units: 0, food: 0, metal: 0, fuel: 0 };
+    this.breakdown   = [];   // [{ label, food, metal, fuel }, ...]
 
-    // Player state — replace with real data when Supabase is wired up
-    this.playerName   = 'Player 1';
-    this.planetCount  = 0;
-    this.resources    = { units: 0, food: 0, metal: 0, fuel: 0 };
+    // Slot hit-zones stored so we can attach hover listeners
+    this._slotZones  = {};
+
+    // Tooltip state
+    this._tooltipKey    = null;  // which resource is currently showing
+    this._tooltipScroll = 0;     // horizontal scroll offset for breakdown rows
   }
 
   create() {
@@ -17,57 +23,65 @@ export default class UIScene extends Phaser.Scene {
     this.add.rectangle(0, 0, width, TOP_BAR_H, 0x080c14, 0.95).setOrigin(0, 0);
     this.add.rectangle(0, TOP_BAR_H - 1, width, 1, 0x2255aa, 0.7).setOrigin(0, 0);
 
-    // Player name + planet count (top left)
-    // Planet icon — small circle split into coloured segments
-    this._drawPlanetIcon(14, TOP_BAR_H / 2, 10);
+    // Pie chart icon
+    this.pieGfx = this.add.graphics();
+    this._drawPlanetIcon(14, TOP_BAR_H / 2, 10, null);
 
-    // Player name + planet count (number only, icon acts as label)
     this.playerLabel = this.add.text(32, TOP_BAR_H / 2,
       `${this.playerName}  —  ${this.planetCount}`, {
-      font: '13px monospace',
-      color: '#7799bb',
+      font: '13px monospace', color: '#7799bb',
     }).setOrigin(0, 0.5);
 
-    // Resource readouts (top right) — units, food, metal, fuel
-    const resources = [
-      { key: 'units', icon: '⬡', color: '#aaccff' },
-      { key: 'food',  icon: '🌾', color: '#88cc44' },
-      { key: 'metal', icon: '⚙',  color: '#8888cc' },
-      { key: 'fuel',  icon: '⛽', color: '#cc8844' },
+    // ── Resource slots (top right) ─────────────────────────────────────────
+    const resDefs = [
+      { key: 'units', icon: '⬡', color: '#aaccff', label: 'Units'  },
+      { key: 'food',  icon: '🌾', color: '#88cc44', label: 'Food'   },
+      { key: 'metal', icon: null, color: '#8888cc', label: 'Metal'  },
+      { key: 'fuel',  icon: '⛽', color: '#cc8844', label: 'Fuel'   },
     ];
 
     this.resourceTexts = {};
-    // Each slot: icon(16) + label(40) + value(60) + gap(24) = 140px per slot
-    // Rightmost slot ends 20px from edge, so total right offset = 20 + 4*140 = 580
     const SLOT_W    = 140;
     const RIGHT_PAD = 20;
-    resources.forEach(({ key, icon, color }, i) => {
-      // Anchor each slot from the right edge
-      const slotRight = width - RIGHT_PAD - (resources.length - 1 - i) * SLOT_W;
+
+    resDefs.forEach(({ key, icon, color, label }, i) => {
+      const slotRight = width - RIGHT_PAD - (resDefs.length - 1 - i) * SLOT_W;
       const slotLeft  = slotRight - SLOT_W + 10;
 
-      // Icon
-      this.add.text(slotLeft, TOP_BAR_H / 2, icon, {
-        font: '14px monospace', color,
-      }).setOrigin(0, 0.5);
+      if (icon) {
+        this.add.text(slotLeft, TOP_BAR_H / 2, icon, {
+          font: '14px monospace', color,
+        }).setOrigin(0, 0.5);
+      } else {
+        // Metal: drawn gear icon — two overlapping rectangles + hollow centre
+        this._drawMetalIcon(slotLeft + 7, TOP_BAR_H / 2, color);
+      }
 
-      // Label
-      this.add.text(slotLeft + 22, TOP_BAR_H / 2,
-        key.charAt(0).toUpperCase() + key.slice(1), {
+      this.add.text(slotLeft + 22, TOP_BAR_H / 2, label, {
         font: '11px monospace', color: '#4a6688',
       }).setOrigin(0, 0.5);
 
-      // Value — right-aligned to slot edge, wide enough for 6 digits
       this.resourceTexts[key] = this.add.text(slotRight, TOP_BAR_H / 2, '0', {
         font: 'bold 13px monospace', color,
       }).setOrigin(1, 0.5);
+
+      // Invisible hover zone covering the whole slot
+      if (key !== 'units') {
+        const zoneW = SLOT_W - 4;
+        const zone  = this.add.rectangle(
+          slotLeft - 4, TOP_BAR_H / 2, zoneW, TOP_BAR_H - 4,
+          0xffffff, 0
+        ).setOrigin(0, 0.5).setInteractive();
+
+        zone.on('pointerover', () => this._showTooltip(key, slotRight, color, resDefs));
+        this._slotZones[key] = zone;
+      }
     });
 
     // ── Bottom bar ─────────────────────────────────────────────────────────
     this.add.rectangle(0, height - 80, width, 80, 0x080c14, 0.97).setOrigin(0, 0);
     this.add.rectangle(0, height - 82, width, 2, 0x2255aa, 0.8).setOrigin(0, 0);
 
-    // Stack info (bottom left)
     this.stackLabel = this.add.text(16, height - 66, 'No stack selected', {
       font: '13px monospace', color: '#44aaff'
     });
@@ -75,7 +89,6 @@ export default class UIScene extends Phaser.Scene {
       font: '11px monospace', color: '#7aaa8a'
     });
 
-    // Controls hint (bottom centre)
     this.add.text(width / 2, height - 56,
       'Click stack to select  ·  Click destination to move  ·  Click same node to open panel  ·  ESC to deselect',
       { font: '11px monospace', color: '#223355' }
@@ -85,7 +98,6 @@ export default class UIScene extends Phaser.Scene {
       { font: '11px monospace', color: '#1a2a44' }
     ).setOrigin(0.5, 0);
 
-    // Event log (bottom right)
     this.logTexts = [];
     for (let i = 0; i < 3; i++) {
       this.logTexts.push(
@@ -94,39 +106,277 @@ export default class UIScene extends Phaser.Scene {
         }).setOrigin(1, 0)
       );
     }
+
+    // ── Tooltip (built once, shown/hidden on hover) ────────────────────────
+    this._buildTooltip();
   }
 
-  // ── Public update methods (call these when game state changes) ─────────
+  _drawMetalIcon(cx, cy, hexColor) {
+    // Convert hex string to number for Graphics
+    const col = parseInt(hexColor.replace('#', ''), 16);
+    const g   = this.add.graphics();
 
-  updateResources({ units, food, metal, fuel }) {
+    // Outer octagon approximated by two overlapping rotated rectangles
+    g.fillStyle(col, 1);
+    g.fillRect(cx - 5, cy - 7, 10, 14);   // vertical bar
+    g.fillRect(cx - 7, cy - 5, 14, 10);   // horizontal bar
+
+    // Diagonal cuts — four small corner triangles in background colour to fake octagon
+    g.fillStyle(0x080c14, 1);
+    g.fillTriangle(cx - 5, cy - 7,  cx - 7, cy - 5,  cx - 5, cy - 5);  // top-left
+    g.fillTriangle(cx + 5, cy - 7,  cx + 7, cy - 5,  cx + 5, cy - 5);  // top-right
+    g.fillTriangle(cx - 5, cy + 7,  cx - 7, cy + 5,  cx - 5, cy + 5);  // bottom-left
+    g.fillTriangle(cx + 5, cy + 7,  cx + 7, cy + 5,  cx + 5, cy + 5);  // bottom-right
+
+    // Hollow centre circle
+    g.fillStyle(0x080c14, 1);
+    g.fillCircle(cx, cy, 4);
+  }
+
+  update() {
+    // Hide tooltip when pointer is outside both the slot zone and the tooltip panel
+    if (!this.ttContainer || !this.ttContainer.visible) return;
+    const ptr = this.input.activePointer;
+    const tx  = this.ttContainer.x;
+    const ty  = this.ttContainer.y;
+
+    // Is pointer inside the tooltip panel?
+    // Extend hit area 10px upward to bridge the gap between slot and tooltip
+    const inTooltip = ptr.x >= tx && ptr.x <= tx + this._ttW &&
+                      ptr.y >= ty - 10 && ptr.y <= ty + this._ttH;
+
+    // Is pointer inside the active slot zone?
+    const slotZone = this._slotZones[this._tooltipKey];
+    const inSlot   = slotZone && slotZone.getBounds().contains(ptr.x, ptr.y);
+
+    if (!inTooltip && !inSlot) this._hideTooltip();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Tooltip
+  // ══════════════════════════════════════════════════════════════════════════
+
+  _buildTooltip() {
+    const TT_W = 320;
+    const TT_H = 140;
+
+    // Container — hidden by default, depth above everything
+    this.ttContainer = this.add.container(0, 0).setVisible(false).setDepth(50);
+
+    // Background panel
+    const bg = this.add.graphics();
+    bg.fillStyle(0x060a12, 0.92);
+    bg.fillRoundedRect(0, 0, TT_W, TT_H, 6);
+    bg.lineStyle(1, 0x2255aa, 0.8);
+    bg.strokeRoundedRect(0, 0, TT_W, TT_H, 6);
+    this.ttContainer.add(bg);
+
+    // Total line
+    this.ttTotalText = this.add.text(12, 12, '', {
+      font: 'bold 12px monospace', color: '#ffffff'
+    });
+    this.ttContainer.add(this.ttTotalText);
+
+    // Divider
+    const div = this.add.graphics();
+    div.lineStyle(1, 0x1a2a44, 1);
+    div.lineBetween(12, 32, TT_W - 12, 32);
+    this.ttContainer.add(div);
+
+    // "Per planet:" label
+    this.ttContainer.add(this.add.text(12, 38, 'Per planet:', {
+      font: '10px monospace', color: '#445566'
+    }));
+
+    // Scrollable row area — mask clips content to a rectangle inside the panel
+    const ROW_X  = 12;
+    const ROW_Y  = 54;
+    const ROW_W  = TT_W - 24;
+    const ROW_H  = 52;
+
+    const maskGfx = this.make.graphics({ add: false });
+    // Mask uses WORLD coords — will be repositioned when tooltip moves
+    this.ttMaskGfx = this.make.graphics({ add: false });
+    this.ttRowMask = this.ttMaskGfx.createGeometryMask();
+
+    // Container for scrollable rows
+    this.ttRowContainer = this.add.container(ROW_X, ROW_Y);
+    this.ttRowContainer.setMask(this.ttRowMask);
+    this.ttContainer.add(this.ttRowContainer);
+
+    // Scrollbar track + thumb
+    const sbX = TT_W - 8;
+    this.ttSbTrack = this.add.graphics();
+    this.ttSbTrack.fillStyle(0x1a2a44, 1);
+    this.ttSbTrack.fillRoundedRect(sbX, ROW_Y, 4, ROW_H, 2);
+    this.ttContainer.add(this.ttSbTrack);
+
+    this.ttSbThumb = this.add.graphics();
+    this.ttContainer.add(this.ttSbThumb);
+
+    // Store layout for use in show/update
+    this._ttW    = TT_W;
+    this._ttH    = TT_H;
+    this._ttRowX = ROW_X;
+    this._ttRowY = ROW_Y;
+    this._ttRowW = ROW_W;
+    this._ttRowH = ROW_H;
+
+    // Horizontal scroll via mouse wheel while hovering tooltip area
+    this.input.on('wheel', (ptr, objs, dx, dy) => {
+      if (!this.ttContainer.visible) return;
+      const tx = this.ttContainer.x;
+      const ty = this.ttContainer.y;
+      // Only scroll if pointer is inside the row area of the tooltip
+      if (ptr.x >= tx && ptr.x <= tx + this._ttW &&
+          ptr.y >= ty + this._ttRowY && ptr.y <= ty + this._ttRowY + this._ttRowH) {
+        this._tooltipScroll = Phaser.Math.Clamp(
+          this._tooltipScroll + dy * 0.3, 0, this._ttMaxScroll
+        );
+        this._updateTooltipRows();
+      }
+    });
+  }
+
+  _showTooltip(key, slotRight, color, resDefs) {
+    if (this._tooltipKey === key) return;
+    this._tooltipKey    = key;
+    this._tooltipScroll = 0;
+
+    const { width } = this.scale;
+
+    // Position tooltip below the slot, anchored to right edge but clamped to screen
+    const TT_W = this._ttW;
+    const TT_H = this._ttH;
+    const tx   = Math.min(slotRight - TT_W, width - TT_W - 8);
+    const ty   = 44;  // Just below the top bar
+
+    this.ttContainer.setPosition(tx, ty);
+    this.ttContainer.setVisible(true);
+
+    // Update mask world position to match container
+    this.ttMaskGfx.clear();
+    this.ttMaskGfx.fillRect(
+      tx + this._ttRowX, ty + this._ttRowY,
+      this._ttRowW, this._ttRowH
+    );
+
+    // Total per tick
+    const total = this.breakdown.reduce((s, b) => s + (b[key] || 0), 0);
+    const label = key.charAt(0).toUpperCase() + key.slice(1);
+    this.ttTotalText.setText(`+${total} ${label} / tick`);
+    this.ttTotalText.setColor(color);
+
+    // Build rows
+    this._ttMaxScroll = 0;
+    this._ttCurrentKey = key;
+    this._updateTooltipRows();
+  }
+
+  _updateTooltipRows() {
+    this.ttRowContainer.removeAll(true);
+
+    const key      = this._ttCurrentKey;
+    const ROW_W    = this._ttRowW;
+    const ROW_H    = this._ttRowH;
+    const ITEM_W   = 90;
+    const ITEM_GAP = 8;
+
+    // Each source is a small vertical block: planet name + value
+    this.breakdown.forEach((src, i) => {
+      const val = src[key] || 0;
+      const ix  = i * (ITEM_W + ITEM_GAP) - this._tooltipScroll;
+
+      // Skip if fully outside view
+      if (ix + ITEM_W < 0 || ix > ROW_W) return;
+
+      const itemBg = this.add.graphics();
+      itemBg.fillStyle(0x0d1a2e, 1);
+      itemBg.fillRoundedRect(ix, 0, ITEM_W, ROW_H - 4, 4);
+      this.ttRowContainer.add(itemBg);
+
+      this.ttRowContainer.add(this.add.text(ix + ITEM_W / 2, 6, src.label, {
+        font: '9px monospace', color: '#7799bb',
+        wordWrap: { width: ITEM_W - 6 }, align: 'center'
+      }).setOrigin(0.5, 0));
+
+      this.ttRowContainer.add(this.add.text(ix + ITEM_W / 2, 28, `+${val}`, {
+        font: 'bold 11px monospace',
+        color: val > 0 ? '#44aaff' : '#445566'
+      }).setOrigin(0.5, 0));
+    });
+
+    // Update scrollbar thumb
+    const totalW      = this.breakdown.length * (ITEM_W + ITEM_GAP);
+    this._ttMaxScroll = Math.max(0, totalW - ROW_W);
+    const sbX         = this._ttW - 8;
+    const sbY         = this._ttRowY;
+
+    this.ttSbThumb.clear();
+    if (this._ttMaxScroll > 0) {
+      const thumbW = Math.max(20, (ROW_W / totalW) * ROW_W);
+      const thumbX = this._ttRowX + (this._tooltipScroll / this._ttMaxScroll) * (ROW_W - thumbW);
+      this.ttSbThumb.fillStyle(0x2255aa, 1);
+      this.ttSbThumb.fillRoundedRect(thumbX, sbY + this._ttRowH + 4, thumbW, 4, 2);
+    }
+  }
+
+  _hideTooltip() {
+    this.ttContainer.setVisible(false);
+    this._tooltipKey = null;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Public update methods
+  // ══════════════════════════════════════════════════════════════════════════
+
+  updateResources({ units, food, metal, fuel }, breakdown) {
     this.resources = { units, food, metal, fuel };
     Object.entries(this.resources).forEach(([key, val]) => {
       if (this.resourceTexts[key]) this.resourceTexts[key].setText(String(val));
     });
+    if (breakdown) {
+      this.breakdown = breakdown;
+      // Refresh tooltip live if it's currently open
+      if (this._tooltipKey) this._updateTooltipRows();
+    }
   }
 
-  updatePlayerInfo(name, planetCount) {
+  updatePlayerInfo(name, planetCount, typeCounts) {
     this.playerName  = name;
     this.planetCount = planetCount;
     this.playerLabel.setText(`${name}  —  ${planetCount}`);
+    if (typeCounts) this._drawPlanetIcon(14, 20, 10, typeCounts);
   }
 
-  // Draws a small circle divided into coloured arcs — used as the planet count icon.
-  // Phaser's Graphics.slice() draws filled pie wedges: slice(x, y, radius, startAngle, endAngle)
-  _drawPlanetIcon(x, y, r) {
-    const g = this.add.graphics();
-    const segments = [
-      { color: 0xff5522, from: 0,             to: Math.PI * 0.5  },  // Molten
-      { color: 0x44aaff, from: Math.PI * 0.5, to: Math.PI * 1.1  },  // Habitable
-      { color: 0x888899, from: Math.PI * 1.1, to: Math.PI * 1.65 },  // Barren
-      { color: 0xccdd22, from: Math.PI * 1.65,to: Math.PI * 2    },  // Sulfuric
-    ];
-    segments.forEach(({ color, from, to }) => {
-      g.fillStyle(color, 0.9);
-      g.slice(x, y, r, from, to, false);
-      g.fillPath();
-    });
-    // Thin dark border
+  _drawPlanetIcon(x, y, r, typeCounts) {
+    const g = this.pieGfx;
+    g.clear();
+    const TYPE_COLORS = {
+      molten: 0xff5522, habitable: 0x44aaff, barren: 0x888899, sulfuric: 0xccdd22,
+    };
+    const types = Object.keys(TYPE_COLORS);
+    const total = typeCounts ? types.reduce((s, t) => s + (typeCounts[t] || 0), 0) : 0;
+
+    if (!typeCounts || total === 0) {
+      const step = (Math.PI * 2) / types.length;
+      types.forEach((type, i) => {
+        g.fillStyle(TYPE_COLORS[type], 0.4);
+        g.slice(x, y, r, i * step, (i + 1) * step, false);
+        g.fillPath();
+      });
+    } else {
+      let angle = 0;
+      types.forEach(type => {
+        const count = typeCounts[type] || 0;
+        if (count === 0) return;
+        const sweep = (count / total) * Math.PI * 2;
+        g.fillStyle(TYPE_COLORS[type], 0.9);
+        g.slice(x, y, r, angle, angle + sweep, false);
+        g.fillPath();
+        angle += sweep;
+      });
+    }
     g.lineStyle(1, 0x080c14, 1);
     g.strokeCircle(x, y, r);
   }
