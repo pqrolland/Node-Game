@@ -401,4 +401,19 @@ export default class UIScene extends Phaser.Scene {
       t.setAlpha(1 - i * 0.3);
     });
   }
+
+  showGameOver() {
+    const { width, height } = this.scale;
+    const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.75)
+      .setOrigin(0).setDepth(50);
+    this.add.text(width / 2, height / 2 - 40, '💀 DEFEAT', {
+      font: 'bold 42px monospace', color: '#ff4455',
+    }).setOrigin(0.5).setDepth(51);
+    this.add.text(width / 2, height / 2 + 10, 'Your flagship was destroyed.', {
+      font: '18px monospace', color: '#aabbcc',
+    }).setOrigin(0.5).setDepth(51);
+    this.add.text(width / 2, height / 2 + 50, 'Refresh to play again.', {
+      font: '14px monospace', color: '#556677',
+    }).setOrigin(0.5).setDepth(51);
+  }
 }

@@ -1,3 +1,5 @@
+import { drawShipIcon, SHIP_TYPES } from '../units/Unit.js';
+
 /**
  * NodePanel.js — Node management panel (bottom of screen).
  *
@@ -82,6 +84,54 @@ export const BUILDING_DEFS = {
       gfx.fillTriangle(cx, cy - 14, cx - 10, cy + 8, cx + 10, cy + 8);
       gfx.fillStyle(0xffcc44, 1);
       gfx.fillTriangle(cx, cy - 6, cx - 5, cy + 8, cx + 5, cy + 8);
+    },
+  },
+  destroyer_factory: {
+    id:       'destroyer_factory',
+    name:     'Destroyer Factory',
+    output:   '+1 Destroyer / 30s',
+    cost:     { food: 100, metal: 100, fuel: 100 },
+    buildTime: 15000,
+    produces:  'destroyer',
+    produceDuration: 30000,
+    drawIcon(gfx, cx, cy) {
+      // Twin mountain peaks
+      gfx.fillStyle(0xaa66ff, 1);
+      gfx.fillTriangle(cx - 8, cy + 7, cx, cy - 5, cx + 2, cy + 7);
+      gfx.fillTriangle(cx - 2, cy + 7, cx + 7, cy - 5, cx + 10, cy + 7);
+    },
+  },
+  cruiser_factory: {
+    id:       'cruiser_factory',
+    name:     'Cruiser Factory',
+    output:   '+1 Cruiser / 30s',
+    cost:     { food: 200, metal: 200, fuel: 200 },
+    buildTime: 15000,
+    produces:  'cruiser',
+    produceDuration: 30000,
+    drawIcon(gfx, cx, cy) {
+      // Two diagonal bars
+      gfx.fillStyle(0x44ddaa, 1);
+      gfx.fillTriangle(cx - 8, cy + 7, cx - 4, cy + 7, cx + 1, cy - 7);
+      gfx.fillTriangle(cx - 8, cy + 7, cx - 3, cy - 7, cx + 1, cy - 7);
+      gfx.fillTriangle(cx,     cy + 7, cx + 4, cy + 7, cx + 9, cy - 7);
+      gfx.fillTriangle(cx,     cy + 7, cx + 5, cy - 7, cx + 9, cy - 7);
+    },
+  },
+  dreadnaught_factory: {
+    id:       'dreadnaught_factory',
+    name:     'Dreadnaught Factory',
+    output:   '+1 Dreadnaught / 30s',
+    cost:     { food: 300, metal: 300, fuel: 300 },
+    buildTime: 15000,
+    produces:  'dreadnaught',
+    produceDuration: 30000,
+    drawIcon(gfx, cx, cy) {
+      // Double right-pointing triangles (fast-forward)
+      gfx.fillStyle(0xff8844, 1);
+      gfx.fillTriangle(cx - 7, cy - 7, cx + 5, cy - 1, cx - 7, cy + 5);
+      gfx.fillStyle(0xff8844, 0.65);
+      gfx.fillTriangle(cx - 2, cy - 7, cx + 9, cy - 1, cx - 2, cy + 5);
     },
   },
 };
@@ -210,32 +260,30 @@ export default class NodePanel extends Phaser.Scene {
       font: 'bold 11px monospace', color: '#44aaff'
     }));
 
+    // Stack selector row (which stack is active)
+    this.stackSelectorContainer = this.add.container(0, 0);
+    this.root.add(this.stackSelectorContainer);
+
+    // Composition rows (one per ship type present)
     this.stackListContainer = this.add.container(0, 0);
     this.root.add(this.stackListContainer);
 
-    this.splitLabel = this.add.text(x, y + 90, 'Split off:', {
-      font: '11px monospace', color: '#7aaa8a'
+    // Split total display + SPLIT & MOVE button
+    this.splitTotalText = this.add.text(x, y + 210, 'Split: 0 units', {
+      font: '10px monospace', color: '#7aaa8a'
     });
-    this.root.add(this.splitLabel);
+    this.root.add(this.splitTotalText);
 
-    this.btnMinus = this._makeButton(x + 80, y + 86, ' − ', () => this._adjustSplit(-1));
-    this.root.add(this.btnMinus);
-
-    this.splitDisplay = this.add.text(x + 124, y + 90, '0', {
-      font: 'bold 13px monospace', color: '#ffffff'
-    }).setOrigin(0.5, 0);
-    this.root.add(this.splitDisplay);
-
-    this.btnPlus = this._makeButton(x + 145, y + 86, ' + ', () => this._adjustSplit(1));
-    this.root.add(this.btnPlus);
-
-    this.btnSplitMove = this._makeButton(x, y + 120, '  SPLIT & MOVE  ', () => this._doSplit(), 0x0d1e3a, 0x44aaff);
+    this.btnSplitMove = this._makeButton(x, y + 228, '  SPLIT & MOVE  ', () => this._doSplit(), 0x0d1e3a, 0x44aaff);
     this.root.add(this.btnSplitMove);
 
-    this.splitHint = this.add.text(x, y + 150, 'Select destination after splitting', {
+    this.splitHint = this.add.text(x, y + 256, 'Select destination after splitting', {
       font: '10px monospace', color: '#223366'
     });
     this.root.add(this.splitHint);
+
+    // Track split amounts per type
+    this._splitComp = { fighter: 0, destroyer: 0, cruiser: 0, dreadnaught: 0, flagship: 0 };
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -477,38 +525,48 @@ export default class NodePanel extends Phaser.Scene {
     zone.on('pointerout',  () => drawBg(false));
     zone.on('pointerdown', () => { if (isEmpty) this._openModal(); /* planet & built: no action yet */ });
 
-    // Naval Base: unit production progress arc (top-right corner)
-    if (realBldId === 'naval_base' && !isConst) {
+    // Add base card layers first so arc renders on top
+    card.add([g, iconG, nameText, outText, zone]);
+
+    // Production buildings: show progress arc in top-right corner
+    const PRODUCTION_BLDS = new Set(['naval_base', 'destroyer_factory', 'cruiser_factory', 'dreadnaught_factory']);
+    if (PRODUCTION_BLDS.has(realBldId) && !isConst) {
       const gs       = this.scene.get('GameScene');
-      const prodData = gs?.unitProduction?.get(this.activeNode?.id);
+      const prodKey  = `${this.activeNode?.id}:${realBldId}`;
+      const prodData = gs?.unitProduction?.get(prodKey);
       const arcG     = this.add.graphics();
-      const drawArc  = () => {
+
+      const drawArc = (progress) => {
         arcG.clear();
-        const progress = prodData
-          ? Math.min(prodData.elapsed / prodData.duration, 1) : 0;
-        // Background track
-        arcG.lineStyle(3, 0x1a2a44, 1);
+        // Dark background track
+        arcG.lineStyle(3, 0x223344, 1);
         arcG.beginPath();
-        arcG.arc(CARD_W - 12, 12, 7, 0, Math.PI * 2);
+        arcG.arc(CARD_W - 14, 14, 8, 0, Math.PI * 2);
         arcG.strokePath();
-        // Progress arc
+        // Bright progress arc
         if (progress > 0) {
           arcG.lineStyle(3, 0x44aaff, 1);
           arcG.beginPath();
-          arcG.arc(CARD_W - 12, 12, 7, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+          arcG.arc(CARD_W - 14, 14, 8, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
           arcG.strokePath();
         }
-        // Tiny unit icon (filled circle)
-        arcG.fillStyle(0x44aaff, 0.9);
-        arcG.fillCircle(CARD_W - 12, 12, 3);
+        // Centre dot
+        arcG.fillStyle(0x44aaff, 1);
+        arcG.fillCircle(CARD_W - 14, 14, 2.5);
       };
-      drawArc();
-      // Store ref for live updates
-      if (prodData) prodData.arcG = arcG;
+
+      const initialProgress = prodData ? Math.min(prodData.elapsed / prodData.duration, 1) : 0;
+      drawArc(initialProgress);
+
+      // Store both ref and redraw fn so GameScene can animate it each tick
+      if (prodData) {
+        prodData.arcG      = arcG;
+        prodData.drawArc   = drawArc;
+      }
+
       card.add(arcG);
     }
 
-    card.add([g, iconG, nameText, outText, zone]);
     this.buildingScrollContainer.add(card);
   }
 
@@ -552,7 +610,7 @@ export default class NodePanel extends Phaser.Scene {
     dim.on('pointerdown', () => this._closeModal());
     this.modal.add(dim);
 
-    this._modalMW = 620; this._modalMH = 320;
+    this._modalMW = 640; this._modalMH = 380;
     this._modalMX = (width - this._modalMW) / 2;
     this._modalMY = (height - this._modalMH) / 2;
 
@@ -594,22 +652,27 @@ export default class NodePanel extends Phaser.Scene {
       b.startsWith('__constructing__') ? b.replace('__constructing__', '') : b
     );
 
-    const options = ['naval_base', 'farm', 'metal_extractor', 'fuel_extractor'];
-    const OPT_W = 130, OPT_H = 168, OPT_GAP = 20;
-    const totalW = options.length * OPT_W + (options.length - 1) * OPT_GAP;
-    const startX = MX + (MW - totalW) / 2;
+    const options = ['naval_base', 'destroyer_factory', 'cruiser_factory', 'dreadnaught_factory', 'farm', 'metal_extractor', 'fuel_extractor'];
+    const OPT_W = 130, OPT_H = 168, OPT_GAP = 16;
+    const COLS  = 4;
 
-    // Resize box
+    // Resize box to fit 2 rows
+    const boxH = MH + 48 + OPT_H + OPT_GAP + 10;
     this._modalBox.clear();
     this._modalBox.fillStyle(0x0d1422, 1);
-    this._modalBox.fillRoundedRect(MX, MY, MW, MH + 48, 8);
+    this._modalBox.fillRoundedRect(MX, MY, MW, boxH, 8);
     this._modalBox.lineStyle(1, 0x2255aa, 1);
-    this._modalBox.strokeRoundedRect(MX, MY, MW, MH + 48, 8);
+    this._modalBox.strokeRoundedRect(MX, MY, MW, boxH, 8);
+
+    const rowTotalW = COLS * OPT_W + (COLS - 1) * OPT_GAP;
+    const startX    = MX + (MW - rowTotalW) / 2;
 
     options.forEach((bldId, i) => {
       const def       = BUILDING_DEFS[bldId];
-      const ox        = startX + i * (OPT_W + OPT_GAP);
-      const oy        = MY + 55;
+      const col       = i % COLS;
+      const row       = Math.floor(i / COLS);
+      const ox        = startX + col * (OPT_W + OPT_GAP);
+      const oy        = MY + 55 + row * (OPT_H + OPT_GAP);
       const alreadyBuilt = existing.includes(bldId);
       const cost      = def.cost || DEFAULT_COST;
       const canAfford = res.food >= cost.food && res.metal >= cost.metal && res.fuel >= cost.fuel;
@@ -787,9 +850,11 @@ export default class NodePanel extends Phaser.Scene {
   // ══════════════════════════════════════════════════════════════════════════
 
   open(node, stacks) {
-    this.activeNode   = node;
-    this.activeStacks = stacks || [];
-    this.splitValue   = 0;
+    this.activeNode      = node;
+    this.activeStacks    = stacks || [];
+    this.splitValue      = 0;
+    this._activeStackIdx = 0;
+    this._splitComp      = { fighter: 0, destroyer: 0, cruiser: 0, dreadnaught: 0, flagship: 0 };
 
     // Initialise building slots with just the planet card if fresh
     if (!node.buildings) {
@@ -823,42 +888,116 @@ export default class NodePanel extends Phaser.Scene {
 
   _refreshStackList() {
     this.stackListContainer.removeAll(true);
+    this.stackSelectorContainer.removeAll(true);
     const x = 16, y = this.PANEL_Y + 34;
 
     if (this.activeStacks.length === 0) {
       this.stackListContainer.add(this.add.text(x, y, 'No friendly units at this node', {
-        font: '11px monospace', color: '#223366'
+        font: '11px monospace', color: '#334466'
       }));
-      this.splitLabel.setVisible(false);
-      this.btnMinus.setVisible(false);
-      this.btnPlus.setVisible(false);
-      this.splitDisplay.setVisible(false);
+      this.splitTotalText.setVisible(false);
       this.btnSplitMove.setVisible(false);
       this.splitHint.setVisible(false);
       return;
     }
 
-    this.splitLabel.setVisible(true);
-    this.btnMinus.setVisible(true);
-    this.btnPlus.setVisible(true);
-    this.splitDisplay.setVisible(true);
+    this.splitTotalText.setVisible(true);
     this.btnSplitMove.setVisible(true);
     this.splitHint.setVisible(true);
 
+    // ── Stack selector tabs ───────────────────────────────────────────────
     this.activeStacks.forEach((stack, i) => {
-      const rowY     = y + i * 22;
-      const selected = i === 0;
-      this.stackListContainer.add(
-        this.add.rectangle(x - 4, rowY - 2, 220, 18, selected ? 0x0d1e3a : 0x0d180d)
-          .setOrigin(0, 0)
-      );
-      this.stackListContainer.add(
-        this.add.text(x, rowY,
-          `▶ Stack ${i + 1}  —  ${stack.stackSize} units  [${stack.isMoving ? 'Moving' : 'Idle'}]`, {
-          font: '11px monospace', color: selected ? '#44aaff' : '#7aaa8a'
-        })
-      );
+      const tx = x + i * 66;
+      const selected = (i === this._activeStackIdx);
+      const bg = this.add.rectangle(tx - 2, y - 2, 62, 16,
+        selected ? 0x0d2244 : 0x0a1020).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+      bg.on('pointerdown', () => {
+        this._activeStackIdx = i;
+        this._splitComp = { fighter: 0, destroyer: 0, cruiser: 0, dreadnaught: 0, flagship: 0 };
+        this._refreshStackList();
+      });
+      this.stackSelectorContainer.add(bg);
+      this.stackSelectorContainer.add(this.add.text(tx + 2, y,
+        `Stack ${i + 1}`, { font: '10px monospace', color: selected ? '#44aaff' : '#446688' }
+      ));
     });
+
+    // ── Composition rows for active stack ─────────────────────────────────
+    const stack = this.activeStacks[this._activeStackIdx || 0];
+    const comp  = stack?.composition || {};
+    const SHIP_LABELS = {
+      flagship:    { label: 'Flagship',    color: 0xffdd44 },
+      dreadnaught: { label: 'Dreadnaught', color: 0xff8844 },
+      cruiser:     { label: 'Cruiser',     color: 0x44ddaa },
+      destroyer:   { label: 'Destroyer',   color: 0xaa66ff },
+      fighter:     { label: 'Fighter',     color: 0x44aaff },
+    };
+
+    let rowY = y + 24;
+    const ROW_H = 30;
+    const types = SHIP_TYPES.filter(t => (comp[t] || 0) > 0);
+
+    if (types.length === 0) {
+      this.stackListContainer.add(this.add.text(x, rowY, 'Stack is empty', {
+        font: '10px monospace', color: '#334466'
+      }));
+      return;
+    }
+
+    types.forEach(type => {
+      const count     = comp[type] || 0;
+      const split     = this._splitComp[type] || 0;
+      const info      = SHIP_LABELS[type];
+
+      // Row background
+      this.stackListContainer.add(
+        this.add.rectangle(x - 4, rowY - 2, this.MID_X - x - 8, ROW_H - 2, 0x0a1020).setOrigin(0, 0)
+      );
+
+      // Ship icon
+      const iconG = this.add.graphics();
+      drawShipIcon(iconG, type, x + 9, rowY + 12, info.color);
+      this.stackListContainer.add(iconG);
+
+      // Ship type label + count
+      this.stackListContainer.add(this.add.text(x + 22, rowY + 4, info.label, {
+        font: '10px monospace', color: '#aaccff'
+      }));
+      this.stackListContainer.add(this.add.text(x + 22, rowY + 16, `${count} total`, {
+        font: '9px monospace', color: '#556688'
+      }));
+
+      // Split controls: − [n] + — anchored well inside the left panel
+      const ctrlX  = this.MID_X - 120;
+      const BTN_W  = 22;
+      const GAP    = 4;
+      const NUM_W  = 24;
+      const xMinus = ctrlX;
+      const xNum   = ctrlX + BTN_W + GAP;
+      const xPlus  = xNum + NUM_W + GAP;
+
+      const btnM = this._makeButton(xMinus, rowY + 6, ' − ', () => {
+        this._splitComp[type] = Math.max(0, (this._splitComp[type] || 0) - 1);
+        this._refreshStackList();
+      }, 0x0d1a2e, '#4499cc');
+      this.stackListContainer.add(btnM);
+
+      const splitCountTxt = this.add.text(xNum + NUM_W / 2, rowY + 10, String(split), {
+        font: 'bold 11px monospace', color: split > 0 ? '#ffffff' : '#334466'
+      }).setOrigin(0.5, 0);
+      this.stackListContainer.add(splitCountTxt);
+
+      const btnP = this._makeButton(xPlus, rowY + 6, ' + ', () => {
+        // Flagship can always be split (moved independently) — max is its count in this stack
+        const maxSplit = count;
+        this._splitComp[type] = Math.min(maxSplit, (this._splitComp[type] || 0) + 1);
+        this._refreshStackList();
+      }, 0x0d1a2e, '#4499cc');
+      this.stackListContainer.add(btnP);
+
+      rowY += ROW_H;
+    });
+
     this._refreshSplitDisplay();
   }
 
@@ -879,30 +1018,30 @@ export default class NodePanel extends Phaser.Scene {
   }
 
   _refreshSplitDisplay() {
-    this.splitDisplay.setText(String(this.splitValue));
+    const total = Object.values(this._splitComp || {}).reduce((s, v) => s + v, 0);
+    this.splitTotalText?.setText(`Split: ${total} unit${total !== 1 ? 's' : ''}`);
+    this.splitTotalText?.setColor(total > 0 ? '#7aaa8a' : '#334466');
   }
 
   // ══════════════════════════════════════════════════════════════════════════
   // Split logic
   // ══════════════════════════════════════════════════════════════════════════
 
-  _adjustSplit(delta) {
-    if (!this.activeStacks.length) return;
-    const max = this.activeStacks[0].stackSize - 1;
-    this.splitValue = Phaser.Math.Clamp(this.splitValue + delta, 0, max);
-    this._refreshSplitDisplay();
-  }
+  _adjustSplit(delta) { /* replaced by per-type controls */ }
 
   _doSplit() {
-    if (this.splitValue <= 0 || !this.activeStacks.length) return;
+    const total = Object.values(this._splitComp || {}).reduce((s, v) => s + v, 0);
+    if (total <= 0 || !this.activeStacks.length) return;
+    const stack = this.activeStacks[this._activeStackIdx || 0];
     this.game.events.emit('splitStack', {
-      sourceStack: this.activeStacks[0],
-      splitAmount: this.splitValue,
-      nodeId:      this.activeNode.id,
+      sourceStack:  stack,
+      splitComp:    { ...this._splitComp },
+      splitAmount:  total,
+      nodeId:       this.activeNode.id,
     });
     this.splitHint.setText('Now click a destination node to move the new stack');
-    this.splitValue = 0;
-    this._refreshSplitDisplay();
+    this._splitComp = { fighter: 0, destroyer: 0, cruiser: 0, dreadnaught: 0, flagship: 0 };
+    this._refreshStackList();
   }
 
   // ══════════════════════════════════════════════════════════════════════════

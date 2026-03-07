@@ -1,4 +1,4 @@
-import Unit from '../units/Unit.js';
+import Unit, { emptyComposition, compositionTotal, dominantType } from '../units/Unit.js';
 import { NODES, EDGES, buildAdjacency, findPath } from '../map/MapGraph.js';
 
 export default class GameScene extends Phaser.Scene {
@@ -41,10 +41,11 @@ export default class GameScene extends Phaser.Scene {
 
     // Spawn on first and last nodes of the spiral
     const nodeIds = Array.from(this.nodeMap.keys());
-    this.spawnStack(nodeIds[0], 'player', 8);
-    this.spawnStack(nodeIds[1], 'player', 3);
-    this.spawnStack(nodeIds[nodeIds.length - 1], 'enemy', 6);
-    this.spawnStack(nodeIds[nodeIds.length - 2], 'enemy', 4);
+    // Player starts with a flagship + fighters. The flagship must survive.
+    this.spawnStack(nodeIds[0], 'player', 0, { ...emptyComposition(), flagship: 1, fighter: 7 });
+    this.spawnStack(nodeIds[1], 'player', 0, { ...emptyComposition(), fighter: 3 });
+    this.spawnStack(nodeIds[nodeIds.length - 1], 'enemy', 0, { ...emptyComposition(), fighter: 6 });
+    this.spawnStack(nodeIds[nodeIds.length - 2], 'enemy', 0, { ...emptyComposition(), fighter: 4 });
 
     // Invisible click zones over each node
     NODES.forEach(node => {
@@ -228,9 +229,11 @@ export default class GameScene extends Phaser.Scene {
 
   // ── Spawning ───────────────────────────────────────────────────────────
 
-  spawnStack(nodeId, team, size) {
+  spawnStack(nodeId, team, size, composition = null) {
     const node = this.nodeMap.get(nodeId);
-    const unit = new Unit(this, node, team, size);
+    const unit = composition
+      ? new Unit(this, node, team, 0, composition)
+      : new Unit(this, node, team, size);
     this.units.push(unit);
     this.nodeOwnership.set(nodeId, team);
     this.drawOwnershipRings();
@@ -351,7 +354,10 @@ export default class GameScene extends Phaser.Scene {
   }
 
   mergeStacks(arriving, stationary) {
-    arriving.stackSize += stationary.stackSize;
+    // Merge compositions
+    for (const type of ['fighter','destroyer','cruiser','dreadnaught','flagship']) {
+      arriving.composition[type] = (arriving.composition[type] || 0) + (stationary.composition[type] || 0);
+    }
     arriving.updateBadge();
     this.removeStack(stationary);
     this.updateOwnership(arriving.currentNode);
@@ -362,42 +368,134 @@ export default class GameScene extends Phaser.Scene {
   }
 
   resolveCombat(attacker, defender) {
-    // Larger stack always wins. Winner loses units equal to the loser's full size.
-    // Ties go to the attacker (arriving stack).
+    const ui = this.scene.get('UIScene');
+    let logMsg = '';
+
+    // ── Destroyer pre-strike: each destroyer kills 2 enemy fighters first ──
+    const applyDestroyerStrike = (striker, target) => {
+      const destroyers = striker.composition.destroyer || 0;
+      if (destroyers === 0) return;
+      const kills = destroyers * 2;
+      // Remove fighters first, then other types from target
+      let remaining = kills;
+      for (const type of ['fighter','cruiser','dreadnaught']) {
+        const take = Math.min(target.composition[type] || 0, remaining);
+        target.composition[type] -= take;
+        remaining -= take;
+        if (remaining <= 0) break;
+      }
+      target.stackSize = compositionTotal(target.composition);
+      if (kills > 0) logMsg += ` Destroyers eliminated ${kills - remaining} ships.`;
+    };
+
+    applyDestroyerStrike(attacker, defender);
+    applyDestroyerStrike(defender, attacker);
+
+    // ── Check if either side wiped out already ────────────────────────────
+    attacker.stackSize = compositionTotal(attacker.composition);
+    defender.stackSize = compositionTotal(defender.composition);
+
+    if (attacker.stackSize <= 0 && defender.stackSize <= 0) {
+      ui.logEvent('⚔ Mutual destruction!' + logMsg);
+      this._handleStackDestroyed(attacker);
+      this._handleStackDestroyed(defender);
+      return;
+    }
+    if (defender.stackSize <= 0) {
+      defender.updateBadge();
+      attacker.updateBadge();
+      ui.logEvent(`⚔ Attacker wins after destroyer strike!` + logMsg);
+      this._handleStackDestroyed(defender);
+      this.updateOwnership(attacker.currentNode);
+      this.updateHUD();
+      return;
+    }
+    if (attacker.stackSize <= 0) {
+      attacker.updateBadge();
+      defender.updateBadge();
+      ui.logEvent(`⚔ Defender wins after destroyer strike!` + logMsg);
+      this._handleStackDestroyed(attacker);
+      this.updateOwnership(defender.currentNode);
+      this.updateHUD();
+      return;
+    }
+
+    // ── Standard combat: larger stack wins ───────────────────────────────
     const [winner, loser] = attacker.stackSize >= defender.stackSize
       ? [attacker, defender]
       : [defender, attacker];
 
-    winner.stackSize -= loser.stackSize;
+    // Remove units from winner equal to loser's full size (highest-tier first)
+    let losses = loser.stackSize;
+    for (const type of ['fighter','cruiser','destroyer','dreadnaught','flagship']) {
+      const take = Math.min(winner.composition[type] || 0, losses);
+      winner.composition[type] -= take;
+      losses -= take;
+      if (losses <= 0) break;
+    }
     winner.updateBadge();
-    this.removeStack(loser);
 
-    // Exact tie — both destroyed
-    if (winner.stackSize <= 0) this.removeStack(winner);
+    const winnerAlive = winner.stackSize > 0;
+    logMsg += ` ⚔ ${winner.team === 'player' ? 'Player' : 'Enemy'} wins with ${winner.stackSize} remaining.`;
+    ui.logEvent(logMsg.trim());
 
-    this.updateOwnership(winner.currentNode);
+    this._handleStackDestroyed(loser);
+    if (!winnerAlive) this._handleStackDestroyed(winner);
+    else this.updateOwnership(winner.currentNode);
     this.updateHUD();
-    this.scene.get('UIScene').logEvent(
-      `⚔ Combat! ${winner.team === 'player' ? 'Player' : 'Enemy'} wins with ${winner.stackSize} remaining`
-    );
   }
 
-  handleSplit({ sourceStack, splitAmount, nodeId }) {
+  // Destroys a stack and checks for flagship loss
+  _handleStackDestroyed(unit) {
+    const hadFlagship = (unit.composition.flagship || 0) > 0;
+    this.removeStack(unit);
+    if (hadFlagship && unit.team === 'player') {
+      this._triggerPlayerDefeat();
+    }
+  }
+
+  _triggerPlayerDefeat() {
+    // Remove all player units
+    const playerUnits = this.units.filter(u => u.team === 'player');
+    playerUnits.forEach(u => this.units = this.units.filter(x => x !== u));
+    playerUnits.forEach(u => u.destroy());
+
+    // Lose all owned planets
+    this.nodeOwnership.forEach((team, nodeId) => {
+      if (team === 'player') this.nodeOwnership.delete(nodeId);
+    });
+    this.drawOwnershipRings();
+    this.updateHUD();
+
+    this.scene.get('UIScene').logEvent('💀 FLAGSHIP DESTROYED — YOU LOSE');
+
+    // Show game-over overlay after short delay
+    this.time.delayedCall(800, () => {
+      this.scene.get('UIScene').showGameOver();
+    });
+  }
+
+  handleSplit({ sourceStack, splitAmount, splitComp, nodeId }) {
     if (!sourceStack || splitAmount <= 0) return;
     if (sourceStack.stackSize <= splitAmount) return;
 
-    // Deduct from source
-    sourceStack.stackSize -= splitAmount;
+    const node = this.nodeMap.get(nodeId);
+
+    // Deduct split composition from source
+    const newComp = { ...emptyComposition() };
+    for (const type of ['fighter','destroyer','cruiser','dreadnaught','flagship']) {
+      const take = Math.min(splitComp?.[type] || 0, sourceStack.composition[type] || 0);
+      newComp[type]                    = take;
+      sourceStack.composition[type]    = (sourceStack.composition[type] || 0) - take;
+    }
     sourceStack.updateBadge();
 
-    // Create new stack at same node
-    const node     = this.nodeMap.get(nodeId);
-    const newStack = this.spawnStack(nodeId, sourceStack.team, splitAmount);
-
-    // Store as pending — next node click will move it
+    // Spawn the new split stack with its composition
+    const newStack = new Unit(this, node, sourceStack.team, 0, newComp);
+    this.units.push(newStack);
     this.pendingSplitStack = newStack;
 
-    // Refresh the panel with updated stack info
+    // Refresh panel
     const stacksHere = this.units.filter(
       u => u.team === 'player' && u.currentNode === nodeId && !u.isMoving
     );
@@ -423,7 +521,10 @@ export default class GameScene extends Phaser.Scene {
       farm:             { food:  1 },
       metal_extractor:  { metal: 1 },
       fuel_extractor:   { fuel:  1 },
-      naval_base:       {},
+      naval_base:            {},
+      destroyer_factory:     {},
+      cruiser_factory:       {},
+      dreadnaught_factory:   {},
     };
 
     const bonus = BONUSES[bldId] || {};
@@ -431,9 +532,20 @@ export default class GameScene extends Phaser.Scene {
       node[res] = (node[res] || 0) + val;
     });
 
-    // Naval Base: start unit production timer for this node
-    if (bldId === 'naval_base' && !this.unitProduction.has(nodeId)) {
-      this.unitProduction.set(nodeId, { elapsed: 0, duration: 15000, arcG: null });
+    // Naval Base and factory buildings: start production timers
+    const PRODUCTION = {
+      naval_base:           { shipType: 'fighter',     duration: 15000 },
+      destroyer_factory:    { shipType: 'destroyer',   duration: 30000 },
+      cruiser_factory:      { shipType: 'cruiser',     duration: 30000 },
+      dreadnaught_factory:  { shipType: 'dreadnaught', duration: 30000 },
+    };
+    const prod = PRODUCTION[bldId];
+    if (prod) {
+      // Key by nodeId + bldId so multiple factories on same node each tick
+      const key = `${nodeId}:${bldId}`;
+      if (!this.unitProduction.has(key)) {
+        this.unitProduction.set(key, { elapsed: 0, duration: prod.duration, shipType: prod.shipType, nodeId, arcG: null, drawArc: null });
+      }
     }
 
     // Notify NodePanel to refresh its resource display
@@ -461,43 +573,32 @@ export default class GameScene extends Phaser.Scene {
   }
 
   _tickUnitProduction(delta) {
-    this.unitProduction.forEach((prod, nodeId) => {
+    this.unitProduction.forEach((prod, key) => {
+      const nodeId = prod.nodeId ?? key;  // support old naval_base key format
       // Only produce for player-owned nodes
       if (this.nodeOwnership.get(nodeId) !== 'player') return;
 
       prod.elapsed += delta;
 
-      // Refresh arc in NodePanel if it's showing this node
-      if (prod.arcG && !prod.arcG.destroyed) {
-        const progress = Math.min(prod.elapsed / prod.duration, 1);
-        prod.arcG.clear();
-        prod.arcG.lineStyle(3, 0x1a2a44, 1);
-        prod.arcG.beginPath();
-        prod.arcG.arc(this._CARD_W - 12, 12, 7, 0, Math.PI * 2);
-        prod.arcG.strokePath();
-        if (progress > 0) {
-          prod.arcG.lineStyle(3, 0x44aaff, 1);
-          prod.arcG.beginPath();
-          prod.arcG.arc(this._CARD_W - 12, 12, 7, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
-          prod.arcG.strokePath();
-        }
-        prod.arcG.fillStyle(0x44aaff, 0.9);
-        prod.arcG.fillCircle(this._CARD_W - 12, 12, 3);
+      // Refresh arc via stored draw function from NodePanel card
+      if (prod.arcG && !prod.arcG.destroyed && prod.drawArc) {
+        prod.drawArc(Math.min(prod.elapsed / prod.duration, 1));
       }
 
       if (prod.elapsed >= prod.duration) {
         prod.elapsed -= prod.duration;
 
-        // Add one unit to the largest friendly stack at this node, or spawn new
-        const node   = this.nodeMap.get(nodeId);
-        const stacks = this.units.filter(u => u.team === 'player' && u.currentNode === nodeId && !u.isMoving);
+        // Add one ship of the produced type to the largest idle stack, or spawn
+        const shipType = prod.shipType || 'fighter';
+        const node     = this.nodeMap.get(nodeId);
+        const stacks   = this.units.filter(u => u.team === 'player' && u.currentNode === nodeId && !u.isMoving);
         if (stacks.length > 0) {
           stacks.sort((a, b) => b.stackSize - a.stackSize);
-          stacks[0].stackSize++;
+          stacks[0].composition[shipType] = (stacks[0].composition[shipType] || 0) + 1;
           stacks[0].updateBadge();
         } else if (node) {
-          // Spawn a new stack of 1 — pass node object as Unit constructor expects
-          const newUnit = new Unit(this, node, 'player', 1);
+          const comp    = { ...emptyComposition(), [shipType]: 1 };
+          const newUnit = new Unit(this, node, 'player', 0, comp);
           this.units.push(newUnit);
         }
         this.updateHUD();

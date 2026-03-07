@@ -1,6 +1,6 @@
 # Node Game
 
-A real-time strategy game built with Phaser 3. Command unit stacks across a procedurally generated star map, capture planets, manage resources, and construct buildings to grow your empire.
+A space-themed real-time strategy game built with Phaser 3. Command fleets of ships across a procedurally generated star map, capture planets, manage resources, construct buildings, and produce new ship types to crush the enemy.
 
 ## 🚀 Quick Start
 
@@ -16,13 +16,13 @@ NodeGame/
 │   ├── style.css
 │   ├── scenes/
 │   │   ├── BootScene.js      # Asset preloader
-│   │   ├── GameScene.js      # Game loop, map, input, combat, ownership, resources, unit production
-│   │   ├── UIScene.js        # Top + bottom HUD bars, resource tooltips
-│   │   └── NodePanel.js      # Node panel — units, planet info, buildings, construction
+│   │   ├── GameScene.js      # Game loop, map, input, combat, ownership, resources, production
+│   │   ├── UIScene.js        # Top/bottom HUD, resource tooltips, game-over overlay
+│   │   └── NodePanel.js      # Node Panel — unit management, planet info, buildings
 │   ├── map/
 │   │   └── MapGraph.js       # Procedural spiral map generator + BFS pathfinding
 │   └── units/
-│       └── Unit.js           # Stack class — travels graph edges in real-time
+│       └── Unit.js           # Stack class with ship composition, icons, movement
 ├── Assets/
 │   ├── sprites/
 │   ├── maps/
@@ -39,93 +39,127 @@ NodeGame/
 | Click a node with a friendly stack | Select that stack |
 | Hover another node while selected | Preview path |
 | Click destination node while selected | Move stack along shortest path |
-| Click the same node again while selected | Open node management panel |
+| Click the same node again while selected | Open Node Panel |
 | ESC | Deselect stack |
 | WASD / Arrow keys | Scroll camera |
 | Scroll wheel | Zoom in / out |
 
-## 🪐 Planet Types
+## 🚀 Ship Types
 
-Each planet is assigned a type randomly at the start of every playthrough.
+Each stack holds a **composition** of multiple ship types. The badge on the stack shows the highest-tier ship present plus the total count.
 
-| Type | Colour | Character |
+| Ship | Icon | Special Rule |
 |---|---|---|
-| Molten | Orange-red | High metal output |
-| Habitable | Blue | High food output |
-| Barren | Grey | Balanced, low output |
-| Sulfuric | Yellow-green | High fuel output |
+| Fighter | Single triangle | Basic ship — produced by Naval Base |
+| Destroyer | Twin peaks | Pre-strike: kills 2 enemy ships before combat resolves |
+| Cruiser | Two diagonal bars `//` | Support ship — role TBD |
+| Dreadnaught | Double fast-forward triangles | Heavy ship — role TBD |
+| Flagship | Diamond with bright core | One per player — if destroyed, you lose the game |
 
-Each planet has **food**, **metal**, and **fuel** base values that sum to 10. Buildings can increase these beyond the base.
-
-## 🗺 Map Generation
-
-The map is procedurally generated each playthrough using an Archimedean spiral:
-- 14 planets placed along the spiral with a minimum spacing of 110px
-- Planet names generated from randomised syllable combinations
-- Every planet is guaranteed at least one connection to its nearest neighbour
-- Additional connections added randomly to nearby planets
-- Full connectivity guaranteed via BFS bridge detection
-
-To regenerate the map, refresh the page.
+**Flagship loss:** When a flagship is destroyed, all player units are removed from the map, all owned planets are lost, and a defeat screen is shown.
 
 ## ⚔ Combat
 
-When a stack arrives at a node occupied by an enemy stack, combat resolves automatically:
-- The larger stack wins and loses units equal to the loser's full stack size
-- The smaller stack is always destroyed
-- An exact tie destroys both stacks
-- Friendly stacks arriving at the same node merge automatically
+When a stack arrives at an enemy-occupied node:
+1. **Destroyer pre-strike** — each destroyer kills 2 enemy ships (fighters first, then others)
+2. **Standard combat** — larger stack wins; winner loses units equal to the loser's full stack size
+3. Losses are removed from the lowest-tier ships first
+
+Ties after pre-strike go to the attacker. Mutual destruction is possible.
+
+Friendly stacks arriving at the same node **merge** — their compositions are combined.
+
+## 🪐 Planet Types
+
+Randomly assigned each playthrough.
+
+| Type | Colour | Base resources |
+|---|---|---|
+| Molten | Orange-red | High metal |
+| Habitable | Blue | High food |
+| Barren | Grey | Balanced, low |
+| Sulfuric | Yellow-green | High fuel |
+
+Base food/metal/fuel values per planet always sum to 10. Buildings add on top.
+
+## 🗺 Map Generation
+
+Procedurally generated each playthrough using an Archimedean spiral:
+- 14 planets placed along the spiral, minimum 110px spacing
+- Planet names generated from randomised syllable combinations
+- Every planet guaranteed at least one edge to its nearest neighbour
+- Additional connections added randomly; full connectivity via BFS bridge detection
+
+Refresh the page to regenerate the map.
 
 ## 🏳 Planet Ownership
 
 - A planet is owned by whichever team has the most units present
-- Ownership shown as coloured concentric rings around the planet (blue = player, red = enemy)
-- Ownership persists when units leave — changes only when the opposing team arrives with more units
+- Shown as coloured concentric rings (blue = player, red = enemy)
+- Ownership persists when units leave; changes only when the opposing team arrives in force
 - Only player-owned planets can have buildings constructed on them
 
 ## 💰 Resources
 
-Every **3 seconds**, resources are collected from all player-owned planets:
-- Each planet contributes its current food, metal, and fuel values to the player's totals
-- Building bonuses stack on top of the planet's base values
+Every **3 seconds**, resources are collected from all player-owned planets.
+
+- Each planet contributes its current food, metal, and fuel values
+- Building bonuses stack on top of base values
 - Displayed in the top-right HUD bar
 
-**Hovering** any resource in the top bar opens a tooltip showing the total per-tick gain and a scrollable per-planet breakdown. The tooltip stays open when you move the cursor into it.
+Hover any resource icon in the top bar to see a scrollable per-planet breakdown tooltip.
 
 ## 🏗 Buildings
 
-Buildings are constructed on player-owned planets via the Node Panel. Each building has a resource cost, a 15-second build time, and is limited to one per planet. During construction a semi-transparent overlay shrinks upward over the card — the building's bonus activates the moment it completes, whether the panel is open or closed.
+Constructed via the **Build Modal** in the Node Panel. Each building costs resources, takes 15 seconds to build, and is limited to one per planet. A semi-transparent overlay shrinks upward over the card during construction. Bonuses apply the moment construction completes — even if the panel is closed.
 
-| Building | Cost | Effect |
+### Production Buildings (unit factories)
+
+| Building | Cost | Output |
 |---|---|---|
-| Naval Base | 50 food · 50 metal · 50 fuel | +1 unit every 15 seconds |
-| Farm | 100 metal · 100 fuel | +1 Food per resource tick |
-| Metal Extractor | 100 food · 100 fuel | +1 Metal per resource tick |
-| Fuel Extractor | 100 food · 100 metal | +1 Fuel per resource tick |
+| Naval Base | 50 / 50 / 50 | +1 Fighter every 15s |
+| Destroyer Factory | 100 / 100 / 100 | +1 Destroyer every 30s |
+| Cruiser Factory | 200 / 200 / 200 | +1 Cruiser every 30s |
+| Dreadnaught Factory | 300 / 300 / 300 | +1 Dreadnaught every 30s |
 
-Resource costs turn **red** in the modal when you can't afford them. Already-built buildings are greyed out and cannot be selected again.
+Each factory card shows a circular progress arc (top-right corner) tracking time until the next ship. Produced ships are added to the largest idle friendly stack at the node, or a new stack of 1 is spawned if none exist.
 
-### Naval Base — Unit Production
+### Resource Buildings
 
-Once a Naval Base completes, it produces one unit every 15 seconds. The unit is added to the largest idle friendly stack at the node, or a new stack of 1 is spawned if none are present. A circular progress arc in the top-right corner of the Naval Base card shows time until the next unit.
+| Building | Cost (food/metal/fuel) | Output |
+|---|---|---|
+| Farm | 0 / 100 / 100 | +1 Food per resource tick |
+| Metal Extractor | 100 / 0 / 100 | +1 Metal per resource tick |
+| Fuel Extractor | 100 / 100 / 0 | +1 Fuel per resource tick |
 
-## 🖥 HUD
+Resource costs shown in **red** in the Build Modal when unaffordable. Already-built buildings are greyed out.
 
-**Top bar**
-- Top left: Pie chart of owned planet type distribution · player name · owned planet count. The pie chart updates live with each capture.
-- Top right: Unit count · Food · Metal · Fuel. Hover any resource for a production breakdown tooltip.
+## 🖥 HUD & UI
 
-**Bottom bar**
-- Left: Selected stack info
-- Centre: Control hints
-- Right: Event log (arrivals, combat, merges)
+### Top Bar
+- **Left:** Pie chart of owned planet types · player name · planet count (updates live on capture)
+- **Right:** Total unit count · Food · Metal · Fuel
 
-**Node panel** (opens when clicking any node)
-- Left half: Unit management — view stacks, split and move units
-- Right half: Planet name, type, resource bars with base values and bonus annotations `(+N)`, building cards
-- Up to 5 building cards per row; scroll vertically with the mouse wheel when there are more
-- First card always shows the planet card (name · level · Outpost)
-- Resource bars update immediately when a building completes
+### Bottom Bar
+- **Left:** Selected stack info
+- **Centre:** Control hints
+- **Right:** Event log (last 3 events — arrivals, combat, merges)
+
+### Node Panel *(opens on clicking any node)*
+- **Left — Unit Management:**
+  - Stack selector tabs (if multiple stacks are present)
+  - Per-ship-type rows: icon · type name · count
+  - `− n +` controls per ship type to compose a split
+  - Running split total + **SPLIT & MOVE** button
+- **Right — Planet Info & Buildings:**
+  - Planet name, type, resource bars with base + bonus annotations `(+N)`
+  - Scrollable building cards (5 per row)
+  - First card always shows the planet card
+
+### Build Modal *(opens from "Add Building" card)*
+- 7 building options in a 2-row grid
+- Resource costs highlighted red if unaffordable
+- Already-built buildings dimmed and unselectable
 
 ## 🌐 Deployment
 

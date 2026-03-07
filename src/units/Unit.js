@@ -1,18 +1,85 @@
 /**
  * Unit.js — A stack of units that travels node-to-node along graph edges.
  *
- * Visual changes:
- *  - Unit body circle is removed — ownership is shown on the planet itself
- *  - Stack badge floats ABOVE the node in a coloured rectangle (player colour)
- *  - Badge moves with the unit while travelling between nodes
+ * Each stack has a `composition` object tracking how many of each ship type
+ * it contains: { fighter, destroyer, cruiser, dreadnaught, flagship }
+ * stackSize is always the sum of all composition values.
+ *
+ * The badge shows: dominant ship icon (left) + total count (right)
+ * Dominant type = highest-tier ship present in the stack.
  */
+
+// Ship tier order (highest = most dominant for icon display)
+export const SHIP_TYPES = ['flagship', 'dreadnaught', 'cruiser', 'destroyer', 'fighter'];
+
+export function emptyComposition() {
+  return { fighter: 0, destroyer: 0, cruiser: 0, dreadnaught: 0, flagship: 0 };
+}
+
+export function compositionTotal(comp) {
+  return (comp.fighter || 0) + (comp.destroyer || 0) + (comp.cruiser || 0)
+       + (comp.dreadnaught || 0) + (comp.flagship || 0);
+}
+
+// Returns the highest-tier ship type present in the composition
+export function dominantType(comp) {
+  for (const t of SHIP_TYPES) {
+    if ((comp[t] || 0) > 0) return t;
+  }
+  return 'fighter';
+}
+
+// Draw a ship icon centred at (cx, cy) into a Phaser Graphics object
+export function drawShipIcon(gfx, type, cx, cy, color) {
+  gfx.fillStyle(color, 1);
+  gfx.lineStyle(1.5, color, 1);
+
+  switch (type) {
+    case 'fighter':
+      // Single upward-pointing triangle
+      gfx.fillTriangle(cx, cy - 7, cx - 5, cy + 5, cx + 5, cy + 5);
+      break;
+
+    case 'destroyer':
+      // Two symmetrical mountain peaks — match destroyer_factory icon, scaled down
+      gfx.fillTriangle(cx - 7, cy + 5, cx - 1, cy - 5, cx + 1, cy + 5);
+      gfx.fillTriangle(cx - 1, cy + 5, cx + 5, cy - 5, cx + 8, cy + 5);
+      break;
+
+    case 'cruiser':
+      // Two even diagonal bars ( // ) — match cruiser_factory icon, scaled down
+      gfx.fillTriangle(cx - 6, cy + 6,  cx - 3, cy + 6,  cx + 1, cy - 6);
+      gfx.fillTriangle(cx - 6, cy + 6,  cx - 2, cy - 6,  cx + 1, cy - 6);
+      gfx.fillTriangle(cx + 1, cy + 6,  cx + 4, cy + 6,  cx + 7, cy - 6);
+      gfx.fillTriangle(cx + 1, cy + 6,  cx + 4, cy - 6,  cx + 7, cy - 6);
+      break;
+
+    case 'dreadnaught':
+      // Two right-pointing triangles (fast-forward) — match dreadnaught_factory icon
+      gfx.fillTriangle(cx - 6, cy - 6, cx + 5, cy,  cx - 6, cy + 6);
+      gfx.fillStyle(color, 0.65);
+      gfx.fillTriangle(cx - 1, cy - 6, cx + 8, cy,  cx - 1, cy + 6);
+      gfx.fillStyle(color, 1);
+      break;
+
+    case 'flagship':
+      // Diamond / star shape — commanding presence
+      gfx.fillStyle(color, 1);
+      gfx.fillTriangle(cx, cy - 8,  cx - 5, cy,  cx + 5, cy);   // top half
+      gfx.fillTriangle(cx - 5, cy,  cx + 5, cy,  cx, cy + 8);   // bottom half
+      // Bright inner core
+      gfx.fillStyle(0xffffff, 0.9);
+      gfx.fillCircle(cx, cy, 2.5);
+      break;
+  }
+}
+
 export default class Unit extends Phaser.GameObjects.Container {
 
-  constructor(scene, startNode, team = 'player', stackSize = 5) {
+  constructor(scene, startNode, team = 'player', stackSize = 5, composition = null) {
     super(scene, startNode.x, startNode.y);
 
     this.team        = team;
-    this.stackSize   = stackSize;
     this.currentNode = startNode.id;
     this.targetNode  = null;
     this.path        = [];
@@ -20,51 +87,76 @@ export default class Unit extends Phaser.GameObjects.Container {
     this.isSelected  = false;
     this.isMoving    = false;
 
+    // Composition — default to all fighters if not specified
+    this.composition = composition || { ...emptyComposition(), fighter: stackSize };
+    this.stackSize   = compositionTotal(this.composition);
+
     // Team colours
-    this.teamColor     = team === 'player' ? 0x44aaff : 0xff4455;
-    this.teamColorHex  = team === 'player' ? '#44aaff' : '#ff4455';
+    this.teamColor    = team === 'player' ? 0x44aaff : 0xff4455;
+    this.teamColorHex = team === 'player' ? '#44aaff' : '#ff4455';
 
-    // ── Badge: coloured rectangle + black unit count, floats above node ───
-    const BADGE_W = 28, BADGE_H = 16, BADGE_Y = -28;
+    const BADGE_Y = -28;
+    this._badgeY  = BADGE_Y;
 
+    // Badge background graphics
     this.badgeBg = scene.add.graphics();
-    this._drawBadgeBg(BADGE_W, BADGE_H, BADGE_Y);
     this.add(this.badgeBg);
 
-    this.badge = scene.add.text(0, BADGE_Y, String(stackSize), {
-      font:  'bold 11px monospace',
+    // Ship icon graphics (drawn inside badge)
+    this.badgeIcon = scene.add.graphics();
+    this.add(this.badgeIcon);
+
+    // Unit count text
+    this.badge = scene.add.text(0, BADGE_Y, String(this.stackSize), {
+      font:  'bold 10px monospace',
       color: '#000000',
     }).setOrigin(0.5, 0.5);
     this.add(this.badge);
 
-    // Store badge dimensions for redraw
-    this._badgeW = BADGE_W;
-    this._badgeH = BADGE_H;
-    this._badgeY = BADGE_Y;
-
-    // ── Selection ring (white, around where the node is) ──────────────────
+    // Selection ring
     this.ring = scene.add.graphics();
     this.ring.lineStyle(2, 0xffffff, 0.9);
     this.ring.strokeCircle(0, 0, 22);
     this.ring.setVisible(false);
     this.add(this.ring);
 
+    this._drawBadge();
+
     scene.add.existing(this);
     this.setDepth(10);
   }
 
-  _drawBadgeBg(w, h, y) {
+  _drawBadge() {
+    const BADGE_H = 18;
+    const BADGE_Y = this._badgeY;
+    const type    = dominantType(this.composition);
+    const count   = this.stackSize;
+    const countStr = String(count);
+
+    // Width: icon area (16px) + count text + padding
+    const textW  = Math.max(12, countStr.length * 7);
+    const BADGE_W = 16 + textW + 10;
+
     this.badgeBg.clear();
     this.badgeBg.fillStyle(this.teamColor, 1);
-    this.badgeBg.fillRoundedRect(-w / 2, y - h / 2, w, h, 3);
-    // Small pointer triangle pointing down toward the node
-    this.badgeBg.fillTriangle(-4, y + h / 2, 4, y + h / 2, 0, y + h / 2 + 5);
+    this.badgeBg.fillRoundedRect(-BADGE_W / 2, BADGE_Y - BADGE_H / 2, BADGE_W, BADGE_H, 3);
+    this.badgeBg.fillTriangle(-4, BADGE_Y + BADGE_H / 2, 4, BADGE_Y + BADGE_H / 2, 0, BADGE_Y + BADGE_H / 2 + 5);
+
+    // Ship icon — left side of badge
+    this.badgeIcon.clear();
+    drawShipIcon(this.badgeIcon, type, -BADGE_W / 2 + 9, BADGE_Y, 0x000000);
+
+    // Count text — right side
+    this.badge.setText(countStr);
+    this.badge.setPosition(BADGE_W / 2 - textW / 2 - 2, BADGE_Y);
+
+    this._badgeW = BADGE_W;
+    this._badgeH = BADGE_H;
   }
 
-  assignPath(nodeIds) {
-    if (!nodeIds || nodeIds.length < 2) return;
-    this.path = nodeIds.slice(1);
-    this._advanceToNextNode();
+  updateBadge() {
+    this.stackSize = compositionTotal(this.composition);
+    this._drawBadge();
   }
 
   setSelected(val) {
@@ -72,14 +164,10 @@ export default class Unit extends Phaser.GameObjects.Container {
     this.ring.setVisible(val);
   }
 
-  updateBadge() {
-    this.badge.setText(String(this.stackSize));
-    // Widen badge if number grows
-    const newW = Math.max(28, this.badge.width + 10);
-    if (newW !== this._badgeW) {
-      this._badgeW = newW;
-      this._drawBadgeBg(this._badgeW, this._badgeH, this._badgeY);
-    }
+  assignPath(nodeIds) {
+    if (!nodeIds || nodeIds.length < 2) return;
+    this.path = nodeIds.slice(1);
+    this._advanceToNextNode();
   }
 
   update(nodeMap, delta) {

@@ -2,19 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>RTS Game — Project Map</title>
+<title>Node Game — Project Map</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap');
 
   :root {
-    --green: #44ff88;
-    --green-dim: #1a5c35;
+    --blue: #44aaff;
+    --blue-dim: #1a3a5c;
     --red: #ff4455;
-    --bg: #080f08;
-    --panel: #0d180d;
-    --border: #1e3a1e;
-    --text: #aaffcc;
-    --muted: #446644;
+    --bg: #080c14;
+    --panel: #0d1422;
+    --border: #1a2a44;
+    --text: #aaccff;
+    --muted: #446688;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -33,14 +33,13 @@
 
   h1 {
     font-family: 'Orbitron', monospace;
-    color: var(--green);
+    color: var(--blue);
     font-size: 1.6rem;
     letter-spacing: 4px;
     text-align: center;
     margin-bottom: 8px;
-    text-shadow: 0 0 20px var(--green);
+    text-shadow: 0 0 20px var(--blue);
   }
-
   .subtitle {
     text-align: center;
     color: var(--muted);
@@ -49,12 +48,11 @@
     letter-spacing: 2px;
   }
 
-  /* ── Main layout ── */
   .grid {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 20px;
-    max-width: 1100px;
+    max-width: 1200px;
     margin: 0 auto 40px;
   }
 
@@ -73,187 +71,75 @@
     position: absolute;
     top: 0; left: 0;
     width: 3px; height: 100%;
-    background: var(--green-dim);
+    background: var(--blue-dim);
     transition: background 0.2s;
   }
-  .card:hover {
-    border-color: var(--green);
-    box-shadow: 0 0 20px rgba(68,255,136,0.12);
-    transform: translateY(-2px);
-  }
-  .card:hover::before { background: var(--green); }
-  .card.active {
-    border-color: var(--green);
-    box-shadow: 0 0 28px rgba(68,255,136,0.2);
-  }
-  .card.active::before { background: var(--green); }
+  .card:hover { border-color: var(--blue); box-shadow: 0 0 20px rgba(68,170,255,0.12); transform: translateY(-2px); }
+  .card:hover::before { background: var(--blue); }
+  .card.active { border-color: var(--blue); box-shadow: 0 0 28px rgba(68,170,255,0.2); }
+  .card.active::before { background: var(--blue); }
 
-  .card-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
+  .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
   .icon { font-size: 1.4rem; }
-  .card-title {
-    font-family: 'Orbitron', monospace;
-    font-size: 0.75rem;
-    color: var(--green);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-  }
-  .card-file {
-    font-size: 0.72rem;
-    color: var(--muted);
-    margin-bottom: 10px;
-    padding: 4px 8px;
-    background: rgba(68,255,136,0.04);
-    border-radius: 2px;
-    border-left: 2px solid var(--green-dim);
-  }
-  .card-desc {
-    font-size: 0.75rem;
-    color: #7aaa8a;
-    line-height: 1.6;
-  }
+  .card-title { font-family: 'Orbitron', monospace; font-size: 0.75rem; color: var(--blue); letter-spacing: 2px; text-transform: uppercase; }
+  .card-file { font-size: 0.72rem; color: var(--muted); margin-bottom: 10px; padding: 4px 8px; background: rgba(68,170,255,0.04); border-radius: 2px; border-left: 2px solid var(--blue-dim); }
+  .card-lines { font-size: 0.65rem; color: #2a4a6a; margin-bottom: 8px; }
+  .card-desc { font-size: 0.75rem; color: #7a9aba; line-height: 1.6; }
 
-  /* ── Detail panel ── */
   .detail {
-    max-width: 1100px;
+    max-width: 1200px;
     margin: 0 auto 40px;
     background: var(--panel);
-    border: 1px solid var(--green);
+    border: 1px solid var(--blue);
     border-radius: 4px;
     padding: 24px;
     display: none;
     animation: fadeIn 0.2s ease;
   }
   .detail.show { display: block; }
-
   @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-
-  .detail-title {
-    font-family: 'Orbitron', monospace;
-    color: var(--green);
-    font-size: 0.9rem;
-    letter-spacing: 3px;
-    margin-bottom: 16px;
-  }
-
+  .detail-title { font-family: 'Orbitron', monospace; color: var(--blue); font-size: 0.9rem; letter-spacing: 3px; margin-bottom: 16px; }
   .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-
-  .detail-section h3 {
-    font-size: 0.7rem;
-    color: var(--muted);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 10px;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 6px;
-  }
-
+  .detail-section h3 { font-size: 0.7rem; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
   .tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
-  .tag {
-    padding: 3px 10px;
-    border-radius: 2px;
-    font-size: 0.7rem;
-    border: 1px solid;
-  }
-  .tag.green  { color: var(--green);  border-color: var(--green-dim);  background: rgba(68,255,136,0.06); }
-  .tag.red    { color: var(--red);    border-color: #5c1a1a;           background: rgba(255,68,85,0.06); }
-  .tag.yellow { color: #ffcc44;       border-color: #5c4a00;           background: rgba(255,204,68,0.06); }
-
+  .tag { padding: 3px 10px; border-radius: 2px; font-size: 0.7rem; border: 1px solid; }
+  .tag.blue   { color: var(--blue); border-color: var(--blue-dim); background: rgba(68,170,255,0.06); }
+  .tag.red    { color: var(--red);  border-color: #5c1a1a;         background: rgba(255,68,85,0.06); }
+  .tag.yellow { color: #ffcc44;     border-color: #5c4a00;         background: rgba(255,204,68,0.06); }
+  .tag.green  { color: #44ff88;     border-color: #1a5c35;         background: rgba(68,255,136,0.06); }
   .step-list { list-style: none; }
-  .step-list li {
-    padding: 6px 0;
-    font-size: 0.75rem;
-    color: #7aaa8a;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    gap: 10px;
-  }
-  .step-list li span.num {
-    color: var(--green);
-    min-width: 20px;
-  }
+  .step-list li { padding: 6px 0; font-size: 0.75rem; color: #7a9aba; border-bottom: 1px solid var(--border); display: flex; gap: 10px; }
+  .step-list li span.num { color: var(--blue); min-width: 20px; }
 
-  /* ── Pipeline flow ── */
   .pipeline {
-    max-width: 1100px;
+    max-width: 1200px;
     margin: 0 auto 40px;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 24px;
   }
-  .pipeline-title {
-    font-family: 'Orbitron', monospace;
-    color: var(--green);
-    font-size: 0.75rem;
-    letter-spacing: 3px;
-    margin-bottom: 20px;
-    text-align: center;
-  }
-  .pipeline-flow {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 0;
-  }
-  .pipe-step {
-    text-align: center;
-    padding: 14px 20px;
-    background: rgba(68,255,136,0.04);
-    border: 1px solid var(--green-dim);
-    border-radius: 3px;
-    min-width: 120px;
-  }
+  .pipeline-title { font-family: 'Orbitron', monospace; color: var(--blue); font-size: 0.75rem; letter-spacing: 3px; margin-bottom: 20px; text-align: center; }
+  .pipeline-flow { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0; }
+  .pipe-step { text-align: center; padding: 14px 20px; background: rgba(68,170,255,0.04); border: 1px solid var(--blue-dim); border-radius: 3px; min-width: 120px; }
   .pipe-step .p-icon { font-size: 1.4rem; margin-bottom: 6px; }
-  .pipe-step .p-name { font-size: 0.65rem; color: var(--green); letter-spacing: 1px; text-transform: uppercase; }
+  .pipe-step .p-name { font-size: 0.65rem; color: var(--blue); letter-spacing: 1px; text-transform: uppercase; }
   .pipe-step .p-sub  { font-size: 0.6rem; color: var(--muted); margin-top: 3px; }
-  .pipe-arrow {
-    color: var(--green-dim);
-    font-size: 1.4rem;
-    padding: 0 6px;
-    flex-shrink: 0;
-  }
+  .pipe-arrow { color: var(--blue-dim); font-size: 1.4rem; padding: 0 6px; flex-shrink: 0; }
 
-  .next-steps {
-    max-width: 1100px;
-    margin: 0 auto;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 24px;
-  }
-  .next-steps h2 {
-    font-family: 'Orbitron', monospace;
-    color: var(--green);
-    font-size: 0.75rem;
-    letter-spacing: 3px;
-    margin-bottom: 16px;
-  }
+  .next-steps { max-width: 1200px; margin: 0 auto; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 24px; }
+  .next-steps h2 { font-family: 'Orbitron', monospace; color: var(--blue); font-size: 0.75rem; letter-spacing: 3px; margin-bottom: 16px; }
   .step-checklist { list-style: none; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-  .step-checklist li {
-    font-size: 0.73rem;
-    color: #7aaa8a;
-    padding: 10px 12px;
-    background: rgba(68,255,136,0.03);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    display: flex;
-    gap: 8px;
-    align-items: flex-start;
-  }
-  .step-checklist li .check { color: var(--green-dim); flex-shrink: 0; }
+  .step-checklist li { font-size: 0.73rem; color: #7a9aba; padding: 10px 12px; background: rgba(68,170,255,0.03); border: 1px solid var(--border); border-radius: 3px; display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+  .step-checklist li .check { color: var(--blue-dim); flex-shrink: 0; }
   .step-checklist li b { color: var(--text); display: block; margin-bottom: 2px; }
+  .done b { text-decoration: line-through; opacity: 0.5; }
 </style>
 </head>
 <body>
 
-<h1>⚔ RTS GAME SCAFFOLD</h1>
-<p class="subtitle">CLICK ANY MODULE TO EXPLORE · PHASER 3 + GITHUB ACTIONS</p>
+<h1>🚀 NODE GAME</h1>
+<p class="subtitle">SPACE RTS · PHASER 3 · CLICK ANY MODULE TO EXPLORE</p>
 
 <div class="grid" id="cards"></div>
 <div class="detail" id="detail"></div>
@@ -261,163 +147,197 @@
 <div class="pipeline">
   <div class="pipeline-title">▶ CI/CD PIPELINE — PUSH TO DEPLOY</div>
   <div class="pipeline-flow">
-    <div class="pipe-step"><div class="p-icon">📝</div><div class="p-name">Write Code</div><div class="p-sub">VS Code</div></div>
+    <div class="pipe-step"><div class="p-icon">📝</div><div class="p-name">Write Code</div><div class="p-sub">VS Code + Live Server</div></div>
     <div class="pipe-arrow">→</div>
     <div class="pipe-step"><div class="p-icon">📤</div><div class="p-name">git push</div><div class="p-sub">to main</div></div>
     <div class="pipe-arrow">→</div>
     <div class="pipe-step"><div class="p-icon">⚙️</div><div class="p-name">GitHub Actions</div><div class="p-sub">auto-triggers</div></div>
     <div class="pipe-arrow">→</div>
-    <div class="pipe-step"><div class="p-icon">✅</div><div class="p-name">Lint Check</div><div class="p-sub">validate files</div></div>
+    <div class="pipe-step"><div class="p-icon">✅</div><div class="p-name">Validate</div><div class="p-sub">check files exist</div></div>
     <div class="pipe-arrow">→</div>
     <div class="pipe-step"><div class="p-icon">🚀</div><div class="p-name">Deploy</div><div class="p-sub">GitHub Pages</div></div>
     <div class="pipe-arrow">→</div>
-    <div class="pipe-step"><div class="p-icon">🌐</div><div class="p-name">Live URL</div><div class="p-sub">yourname.github.io/rts</div></div>
+    <div class="pipe-step"><div class="p-icon">🌐</div><div class="p-name">Live URL</div><div class="p-sub">yourname.github.io/NodeGame</div></div>
   </div>
 </div>
 
 <div class="next-steps">
-  <h2>⬡ NEXT STEPS — IN ORDER</h2>
+  <h2>⬡ ROADMAP</h2>
   <ul class="step-checklist" id="steps"></ul>
 </div>
 
 <script>
 const modules = [
   {
-    icon: '🗂',
-    title: 'Entry Point',
-    file: 'index.html',
-    desc: 'Loads Phaser from CDN. No npm install needed.',
-    tags: ['HTML', 'Phaser CDN', 'No build step'],
-    tagTypes: ['green','green','yellow'],
-    steps: [
-      'Loads style.css for base layout',
-      'Imports Phaser 3.60 from jsDelivr CDN',
-      'Loads src/main.js as an ES module'
-    ],
-    note: 'Open this file with VS Code Live Server to start developing.'
-  },
-  {
-    icon: '⚙',
-    title: 'Game Config',
-    file: 'src/main.js',
-    desc: 'Phaser config. Sets resolution, physics, and scene order.',
-    tags: ['1280×720', 'Arcade Physics', 'WebGL/Canvas'],
-    tagTypes: ['green','green','yellow'],
-    steps: [
-      'Imports all 3 scenes (Boot, Game, UI)',
-      'Configures Phaser with 1280×720 canvas',
-      'Enables Arcade physics for unit movement',
-      'Starts the scene pipeline automatically'
-    ],
-    note: 'Change width/height here to resize the game canvas.'
-  },
-  {
-    icon: '⬇',
-    title: 'Boot Scene',
-    file: 'src/scenes/BootScene.js',
-    desc: 'Asset preloader. Shows loading bar, then launches GameScene.',
-    tags: ['Preloader', 'Loading Bar', 'Asset Comments'],
-    tagTypes: ['yellow','yellow','green'],
-    steps: [
-      'Draws a loading progress bar',
-      'All asset load() calls go here (sprites, maps, audio)',
-      'Auto-transitions to GameScene when done'
-    ],
-    note: 'Uncomment the load.image() lines as you add sprite assets.'
-  },
-  {
     icon: '🎮',
     title: 'Game Scene',
     file: 'src/scenes/GameScene.js',
-    desc: 'Core game loop. Camera, input, unit spawning, drag-select.',
-    tags: ['Camera Scroll', 'Drag Select', 'Right-click Move', 'Grid Map'],
-    tagTypes: ['green','green','green','yellow'],
+    lines: 662,
+    desc: 'Core game loop: map rendering, input, combat, ownership, resources, unit production, flagship defeat.',
+    tags: ['Combat', 'Ownership', 'Resources', 'Unit Production', 'Flagship'],
+    tagTypes: ['blue','blue','blue','blue','yellow'],
     steps: [
-      'Draws a 2560×1440 grid background',
-      'Spawns 3 player units + 1 enemy',
-      'WASD/Arrows scroll the camera',
-      'Scroll wheel zooms in/out',
-      'Left-drag draws a green selection box',
-      'Right-click moves selected units in formation'
+      'Procedural spiral map with 14 planet nodes',
+      'WASD/arrow camera scroll + scroll-wheel zoom',
+      'Click to select stacks, preview + issue move orders',
+      'handleArrival: merge friendly stacks or trigger combat',
+      'resolveCombat: destroyer pre-strike → standard combat',
+      '_handleStackDestroyed: flagship loss triggers game over',
+      '_tickResources: food/metal/fuel collected every 3 seconds',
+      '_tickUnitProduction: per-building timers spawn ships into stacks',
+      'handleBuildingAdded: applies resource bonuses + starts production timers',
+      'spawnStack: accepts optional composition object for ship types',
     ],
-    note: 'This is where most of your game logic will live.'
+    note: 'unitProduction Map is keyed by "nodeId:buildingId" — supports multiple factories per planet.'
   },
   {
     icon: '🖥',
     title: 'UI Scene',
     file: 'src/scenes/UIScene.js',
-    desc: 'HUD overlay. Runs parallel to GameScene — always on top.',
-    tags: ['HUD', 'Selection Count', 'Resource Bar'],
-    tagTypes: ['green','green','yellow'],
+    lines: 419,
+    desc: 'HUD overlay running in parallel with GameScene. Top bar, bottom bar, tooltips, game-over screen.',
+    tags: ['HUD', 'Pie Chart', 'Resource Tooltip', 'Game Over'],
+    tagTypes: ['blue','blue','blue','red'],
     steps: [
-      'Renders a bottom bar with dark background',
-      'Shows how many units are selected',
-      'Displays placeholder resource counter',
-      'Shows keyboard controls hint'
+      'Top-left: live pie chart of owned planet types + player name + count',
+      'Top-right: unit count + food/metal/fuel icons and values',
+      'Hover resource slot: scrollable per-planet breakdown tooltip',
+      'Bottom-left: selected stack info (type + count)',
+      'Bottom-right: event log (last 3 events, fading alpha)',
+      'showGameOver(): full-screen defeat overlay',
+      'updateResources() accepts breakdown array for tooltip data',
     ],
-    note: 'Wire resource display to Supabase when you add the backend.'
+    note: 'Tooltip stays open when cursor moves from slot into tooltip area (10px buffer guard in update).'
   },
   {
-    icon: '🪖',
+    icon: '📋',
+    title: 'Node Panel',
+    file: 'src/scenes/NodePanel.js',
+    lines: 1062,
+    desc: 'Bottom panel (300px). Left: unit management with per-type split controls. Right: planet info + scrollable building cards.',
+    tags: ['Unit Management', 'Buildings', 'Build Modal', 'Construction'],
+    tagTypes: ['blue','blue','blue','yellow'],
+    steps: [
+      'Left — stack selector tabs + per-ship-type composition rows',
+      '− n + controls per ship type; running split total + SPLIT & MOVE',
+      '_doSplit emits splitComp object; GameScene deducts exact ship types',
+      'Right — planet name, type label, resource bars with (+N) bonus annotations',
+      'Building cards: scrollable, 5 per row, geometry-masked, scrollbar thumb',
+      '_makeCard: constructs card with icon, name, output, zone; arc for factories',
+      '_reattachOverlays: recreates construction overlays after every scroll rebuild',
+      'Build Modal: 7 options in 2-row grid, costs red if unaffordable, already-built greyed out',
+      'Factory cards show circular progress arc (top-right) animated by GameScene tick',
+      'nodeResourcesUpdated event refreshes bars live when building completes',
+    ],
+    note: 'BUILDING_DEFS contains all 7 building definitions including drawIcon(), cost, produces, produceDuration.'
+  },
+  {
+    icon: '🚀',
     title: 'Unit Class',
     file: 'src/units/Unit.js',
-    desc: 'Individual unit. Renders as triangle, moves toward target.',
-    tags: ['Physics Body', 'Formation Move', 'Selection Ring', 'Team Color'],
-    tagTypes: ['green','green','green','yellow'],
+    lines: 203,
+    desc: 'Stack container with ship composition. Badge shows dominant ship icon + total count. Exports ship icon draw functions.',
+    tags: ['Composition', 'Ship Icons', 'Badge', 'Movement'],
+    tagTypes: ['blue','blue','blue','yellow'],
     steps: [
-      'Extends Phaser Container (body + ring grouped)',
-      'Green triangle = player, red = enemy',
-      'moveTo(x,y) sets a movement target',
-      'update() steers toward target each frame',
-      'setSelected() toggles white ring visibility',
-      'Rotates to face movement direction'
+      'composition: { fighter, destroyer, cruiser, dreadnaught, flagship }',
+      'stackSize always derived from compositionTotal(composition)',
+      'dominantType(): returns highest-tier ship present for badge icon',
+      'drawShipIcon(gfx, type, cx, cy, color): draws the correct icon shape',
+      'Badge: team-coloured rect with ship icon (left) + count text (right)',
+      'updateBadge(): recomputes stackSize and redraws badge',
+      'Exports: drawShipIcon, SHIP_TYPES, emptyComposition, compositionTotal, dominantType',
     ],
-    note: 'Swap triangle graphics for a spritesheet when you have art.'
+    note: 'Ship icon geometry in drawShipIcon matches factory building drawIcon() exactly for visual consistency.'
+  },
+  {
+    icon: '🗺',
+    title: 'Map Graph',
+    file: 'src/map/MapGraph.js',
+    lines: 240,
+    desc: 'Procedural star map generator. Archimedean spiral placement, seeded planet names, BFS pathfinding.',
+    tags: ['Procedural', 'Spiral Layout', 'BFS', 'Pathfinding'],
+    tagTypes: ['blue','blue','blue','green'],
+    steps: [
+      '14 planets placed on Archimedean spiral, minimum 110px spacing',
+      'Planet names built from randomised syllable combinations',
+      'Each planet guaranteed at least one edge to nearest neighbour',
+      'Additional edges added to nearby planets for map density',
+      'BFS bridge detection ensures full connectivity',
+      'findPath(from, to, adjacency): BFS shortest-path routing',
+      'Exports: NODES, EDGES, buildAdjacency, findPath',
+    ],
+    note: 'Refresh the page to regenerate a new map. No seed parameter yet — add one for reproducible maps.'
+  },
+  {
+    icon: '⚙',
+    title: 'Game Config',
+    file: 'src/main.js',
+    lines: 16,
+    desc: 'Phaser 3 config. 1280×720 canvas, 4 scenes in pipeline order.',
+    tags: ['1280×720', 'WebGL/Canvas', '4 Scenes'],
+    tagTypes: ['blue','yellow','blue'],
+    steps: [
+      'Imports BootScene, GameScene, UIScene, NodePanel',
+      '1280×720 canvas, transparent background',
+      'Scene order: Boot → Game (launches UI + NodePanel in parallel)',
+      'No physics engine — movement is manual vector math in Unit.update()',
+    ],
+    note: 'UIScene and NodePanel are launched by GameScene.create() via this.scene.launch().'
   },
   {
     icon: '🔄',
     title: 'CI/CD Pipeline',
     file: '.github/workflows/deploy.yml',
+    lines: null,
     desc: 'Auto-deploys to GitHub Pages on every push to main.',
     tags: ['GitHub Actions', 'GitHub Pages', 'Free Hosting'],
     tagTypes: ['green','green','green'],
     steps: [
       'Triggers on push to main branch',
-      'Job 1: validates all files exist',
-      'Job 2: deploys to GitHub Pages (only on main)',
-      'Live URL: yourname.github.io/rts-game'
+      'Validates all key files exist',
+      'Deploys to GitHub Pages',
+      'Live at: yourname.github.io/NodeGame',
     ],
     note: 'Enable Pages in repo Settings → Pages → Source → GitHub Actions.'
   },
   {
-    icon: '📁',
-    title: 'Assets Folder',
-    file: 'assets/{sprites,maps,audio}/',
-    desc: 'Empty folders ready for your art, tilemaps, and audio.',
-    tags: ['Sprites', 'Tiled Maps', 'Audio'],
-    tagTypes: ['yellow','yellow','yellow'],
+    icon: '⬇',
+    title: 'Boot Scene',
+    file: 'src/scenes/BootScene.js',
+    lines: null,
+    desc: 'Asset preloader. Placeholder loading bar — no assets loaded yet (all graphics are procedural).',
+    tags: ['Preloader', 'Placeholder'],
+    tagTypes: ['yellow','yellow'],
     steps: [
-      'assets/sprites/ — unit & building spritesheets',
-      'assets/maps/ — Tiled editor JSON exports',
-      'assets/audio/ — WAV/OGG sound effects & music',
-      'Load them in BootScene.js preload()'
+      'Draws a loading progress bar',
+      'All graphics currently drawn procedurally in-code',
+      'Auto-transitions to GameScene when done',
     ],
-    note: 'Tiled (free) is the recommended map editor for Phaser tilemaps.'
+    note: 'Uncomment load.image() calls here when you add sprite assets.'
   },
 ];
 
 const nextSteps = [
-  { label: 'First thing', title: 'Run it', desc: 'Open index.html with VS Code Live Server extension' },
-  { label: 'GitHub', title: 'Create repo', desc: 'Push this folder — pipeline auto-activates' },
-  { label: 'GitHub', title: 'Enable Pages', desc: 'Settings → Pages → Source → GitHub Actions' },
-  { label: 'Art', title: 'Add sprites', desc: 'Drop PNGs in assets/sprites/, load in BootScene' },
-  { label: 'Map', title: 'Build a tilemap', desc: 'Use Tiled editor, export JSON to assets/maps/' },
-  { label: 'Later', title: 'Add Supabase', desc: 'Player accounts, save games, leaderboards' },
+  { done: true,  title: 'Node-based movement',     desc: 'Stacks travel graph edges in real-time' },
+  { done: true,  title: 'Combat resolution',        desc: 'Stack combat with destroyer pre-strike' },
+  { done: true,  title: 'Planet ownership',         desc: 'Rings, capture, ownership persistence' },
+  { done: true,  title: 'Resource system',          desc: 'Food/metal/fuel ticks from owned planets' },
+  { done: true,  title: 'Buildings + construction', desc: '7 buildings, timers, cost deduction' },
+  { done: true,  title: 'Unit production',          desc: 'Factories spawn ships on timers' },
+  { done: true,  title: 'Ship types + composition', desc: '5 ship types, badge icons, merge/split' },
+  { done: true,  title: 'Flagship / game over',     desc: 'Lose when flagship is destroyed' },
+  { done: false, title: 'Cruiser ability',          desc: 'Define and implement cruiser special role' },
+  { done: false, title: 'Dreadnaught ability',      desc: 'Define and implement dreadnaught special role' },
+  { done: false, title: 'Planet upgrading',         desc: 'Click planet card to upgrade outpost level' },
+  { done: false, title: 'Enemy AI',                 desc: 'Basic AI: expand, build, attack' },
+  { done: false, title: 'Win condition',            desc: 'Destroy enemy flagship or capture all planets' },
+  { done: false, title: 'Sound effects',            desc: 'Combat, production, capture audio cues' },
+  { done: false, title: 'Multiplayer / persistence',desc: 'Supabase backend for save games or online play' },
 ];
 
 let activeIdx = null;
-
-const cardsEl = document.getElementById('cards');
+const cardsEl  = document.getElementById('cards');
 const detailEl = document.getElementById('detail');
 
 modules.forEach((m, i) => {
@@ -429,6 +349,7 @@ modules.forEach((m, i) => {
       <span class="card-title">${m.title}</span>
     </div>
     <div class="card-file">${m.file}</div>
+    ${m.lines ? `<div class="card-lines">${m.lines} lines</div>` : ''}
     <div class="card-desc">${m.desc}</div>
   `;
   card.addEventListener('click', () => {
@@ -442,7 +363,7 @@ modules.forEach((m, i) => {
     card.classList.add('active');
     activeIdx = i;
 
-    const tags = m.tags.map((t, ti) => `<span class="tag ${m.tagTypes[ti]}">${t}</span>`).join('');
+    const tags  = m.tags.map((t, ti) => `<span class="tag ${m.tagTypes[ti]}">${t}</span>`).join('');
     const steps = m.steps.map((s, si) => `<li><span class="num">${si+1}.</span>${s}</li>`).join('');
     detailEl.innerHTML = `
       <div class="detail-title">${m.icon} ${m.title.toUpperCase()} — ${m.file}</div>
@@ -455,7 +376,7 @@ modules.forEach((m, i) => {
           <h3>Tags</h3>
           <div class="tag-list" style="margin-bottom:16px">${tags}</div>
           <h3>Dev note</h3>
-          <p style="font-size:0.75rem;color:#7aaa8a;line-height:1.6">${m.note}</p>
+          <p style="font-size:0.75rem;color:#7a9aba;line-height:1.6">${m.note}</p>
         </div>
       </div>
     `;
@@ -468,12 +389,16 @@ modules.forEach((m, i) => {
 const stepsEl = document.getElementById('steps');
 nextSteps.forEach(s => {
   const li = document.createElement('li');
-  li.innerHTML = `<span class="check">☐</span><div><b>${s.title}</b>${s.desc}</div>`;
-  li.style.cursor = 'pointer';
-  li.addEventListener('click', () => {
-    li.querySelector('.check').textContent =
-      li.querySelector('.check').textContent === '☐' ? '✅' : '☐';
-  });
+  if (s.done) li.classList.add('done');
+  li.innerHTML = `<span class="check">${s.done ? '✅' : '☐'}</span><div><b>${s.title}</b>${s.desc}</div>`;
+  if (!s.done) {
+    li.style.cursor = 'pointer';
+    li.addEventListener('click', () => {
+      const isDone = li.querySelector('.check').textContent === '✅';
+      li.querySelector('.check').textContent = isDone ? '☐' : '✅';
+      li.classList.toggle('done', !isDone);
+    });
+  }
   stepsEl.appendChild(li);
 });
 </script>
