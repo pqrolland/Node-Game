@@ -25,9 +25,9 @@ export default class UIScene extends Phaser.Scene {
 
     // Pie chart icon
     this.pieGfx = this.add.graphics();
-    this._drawPlanetIcon(14, TOP_BAR_H / 2, 10, null);
+    this._drawPlanetIcon(22, TOP_BAR_H / 2, 10, null);
 
-    this.playerLabel = this.add.text(32, TOP_BAR_H / 2,
+    this.playerLabel = this.add.text(44, TOP_BAR_H / 2,
       `${this.playerName}  —  ${this.planetCount}`, {
       font: '13px monospace', color: '#7799bb',
     }).setOrigin(0, 0.5);
@@ -346,7 +346,7 @@ export default class UIScene extends Phaser.Scene {
     this.playerName  = name;
     this.planetCount = planetCount;
     this.playerLabel.setText(`${name}  —  ${planetCount}`);
-    if (typeCounts) this._drawPlanetIcon(14, 20, 10, typeCounts);
+    if (typeCounts) this._drawPlanetIcon(22, 20, 10, typeCounts);
   }
 
   _drawPlanetIcon(x, y, r, typeCounts) {
@@ -377,8 +377,17 @@ export default class UIScene extends Phaser.Scene {
         angle += sweep;
       });
     }
+    // Separator stroke
     g.lineStyle(1, 0x080c14, 1);
     g.strokeCircle(x, y, r);
+
+    // Ownership ring — same style as planet rings in GameScene
+    // Always player 1 blue (0x44aaff) since this is the local player HUD
+    const RING_COLOR = 0x44aaff;
+    g.lineStyle(3, RING_COLOR, 0.45);
+    g.strokeCircle(x, y, r + 5);
+    g.lineStyle(2, RING_COLOR, 0.9);
+    g.strokeCircle(x, y, r + 3);
   }
 
   showStack(unit) {

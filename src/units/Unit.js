@@ -91,9 +91,31 @@ export default class Unit extends Phaser.GameObjects.Container {
     this.composition = composition || { ...emptyComposition(), fighter: stackSize };
     this.stackSize   = compositionTotal(this.composition);
 
-    // Team colours
-    this.teamColor    = team === 'player' ? 0x44aaff : 0xff4455;
-    this.teamColorHex = team === 'player' ? '#44aaff' : '#ff4455';
+    // Team colours — matches GameScene.PLAYER_COLORS palette
+    const TEAM_COLORS = [
+      0x44aaff, // player   (index 0) — blue
+      0xff4455, // player2  (index 1) — red
+      0x44ff88, // player3  — green
+      0xffcc22, // player4  — yellow
+      0xff88cc, // player5  — pink
+      0xcc66ff, // player6  — purple
+      0xff8844, // player7  — orange
+      0x22ddcc, // player8  — teal
+    ];
+    const TEAM_COLORS_HEX = [
+      '#44aaff','#ff4455','#44ff88','#ffcc22','#ff88cc','#cc66ff','#ff8844','#22ddcc',
+    ];
+    const NEUTRAL_COLOR     = 0x888899;
+    const NEUTRAL_COLOR_HEX = '#888899';
+    let colorIdx = 0;
+    if (team === 'neutral') {
+      this.teamColor    = NEUTRAL_COLOR;
+      this.teamColorHex = NEUTRAL_COLOR_HEX;
+    } else {
+      colorIdx = team === 'player' ? 0 : (parseInt(team.replace('player', '')) - 1) || 0;
+      this.teamColor    = TEAM_COLORS[colorIdx]     || NEUTRAL_COLOR;
+      this.teamColorHex = TEAM_COLORS_HEX[colorIdx] || NEUTRAL_COLOR_HEX;
+    }
 
     const BADGE_Y = -28;
     this._badgeY  = BADGE_Y;

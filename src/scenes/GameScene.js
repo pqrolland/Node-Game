@@ -1,5 +1,5 @@
 import Unit, { emptyComposition, compositionTotal, dominantType } from '../units/Unit.js';
-import { NODES, EDGES, buildAdjacency, findPath } from '../map/MapGraph.js';
+import { generateMapForPlayers, buildAdjacency, findPath } from '../map/MapGraph.js';
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -18,37 +18,81 @@ export default class GameScene extends Phaser.Scene {
     this._CARD_W            = 108; // matches CARD_W in NodePanel
   }
 
-  create() {
-    NODES.forEach(n => this.nodeMap.set(n.id, n));
-    this.adjacency = buildAdjacency(EDGES);
+  init(data) {
+    // Receive config from MainMenuScene (or defaults for direct launch)
+    this.playerCount = (data && data.playerCount) ? data.playerCount : 1;
+  }
 
-    // Assign planet types randomly each playthrough
+  create() {
+    // ── Generate map sized for player count ──────────────────────────────
+    const mapData = generateMapForPlayers(this.playerCount);
+    this._nodes   = mapData.nodes;
+    this._edges   = mapData.edges;
+    this._mapW    = mapData.mapW;
+    this._mapH    = mapData.mapH;
+
+    this._nodes.forEach(n => this.nodeMap.set(n.id, n));
+    this.adjacency = buildAdjacency(this._edges);
+
+    // Assign planet types
     const PLANET_TYPES = ['molten', 'habitable', 'barren', 'sulfuric'];
     this.nodeMap.forEach(node => {
       node.type = PLANET_TYPES[Math.floor(Math.random() * PLANET_TYPES.length)];
-    });
-
-    // Snapshot base resource values before any buildings apply bonuses
-    this.nodeMap.forEach(node => {
       node.baseFood  = node.food;
       node.baseMetal = node.metal;
       node.baseFuel  = node.fuel;
     });
 
-    this.mapGfx      = this.add.graphics();
-    this.ownershipGfx = this.add.graphics().setDepth(4);  // above map, below units
+    this.mapGfx       = this.add.graphics();
+    this.ownershipGfx = this.add.graphics().setDepth(4);
     this.drawMap();
 
-    // Spawn on first and last nodes of the spiral
-    const nodeIds = Array.from(this.nodeMap.keys());
-    // Player starts with a flagship + fighters. The flagship must survive.
-    this.spawnStack(nodeIds[0], 'player', 0, { ...emptyComposition(), flagship: 1, fighter: 7 });
-    this.spawnStack(nodeIds[1], 'player', 0, { ...emptyComposition(), fighter: 3 });
-    this.spawnStack(nodeIds[nodeIds.length - 1], 'enemy', 0, { ...emptyComposition(), fighter: 6 });
-    this.spawnStack(nodeIds[nodeIds.length - 2], 'enemy', 0, { ...emptyComposition(), fighter: 4 });
+    // ── Assign starting planets to each player ────────────────────────────
+    // Distribute start nodes evenly around the spiral for fairness.
+    // Each player gets 2 consecutive nodes. Neutral fills the rest.
+    const nodeIds    = Array.from(this.nodeMap.keys());
+    const totalNodes = nodeIds.length;  // 10 + playerCount*10
+    const usedNodes  = new Set();
+
+    // Helper: find a graph-adjacent neighbour of nodeA that isn't already used
+    const pickAdjacentNode = (nodeA) => {
+      const neighbours = this.adjacency.get(nodeA) || [];
+      // Prefer an unused neighbour
+      const free = neighbours.find(nid => !usedNodes.has(nid));
+      if (free) return free;
+      // Fallback: any neighbour (shouldn't normally happen)
+      return neighbours[0] || nodeIds.find(nid => !usedNodes.has(nid));
+    };
+
+    // Spread player start positions evenly around the spiral
+    for (let p = 0; p < this.playerCount; p++) {
+      const team   = p === 0 ? 'player' : `player${p + 1}`;
+      // Spread start indices evenly so players start far apart
+      let startI   = Math.round((p / this.playerCount) * totalNodes);
+      // Skip already-used nodes
+      while (usedNodes.has(nodeIds[startI % totalNodes])) startI++;
+      const nodeA  = nodeIds[startI % totalNodes];
+      // nodeB must be a graph neighbour of nodeA (guaranteed adjacent on the map)
+      const nodeB  = pickAdjacentNode(nodeA);
+
+      usedNodes.add(nodeA);
+      usedNodes.add(nodeB);
+
+      // Planet A: flagship + 10 fighters
+      this.spawnStack(nodeA, team, 0, { ...emptyComposition(), flagship: 1, fighter: 10 });
+      // Planet B: 10 fighters (always next-door on the graph)
+      this.spawnStack(nodeB, team, 0, { ...emptyComposition(), fighter: 10 });
+    }
+
+    // Neutral faction: 10 fighters on every unclaimed planet
+    nodeIds.forEach(nid => {
+      if (!usedNodes.has(nid)) {
+        this.spawnStack(nid, 'neutral', 0, { ...emptyComposition(), fighter: 10 });
+      }
+    });
 
     // Invisible click zones over each node
-    NODES.forEach(node => {
+    this._nodes.forEach(node => {
       const zone = this.add.circle(node.x, node.y, 28, 0xffffff, 0)
         .setInteractive({ useHandCursor: true });
       zone.nodeId = node.id;
@@ -59,14 +103,15 @@ export default class GameScene extends Phaser.Scene {
 
     this.events.on('unitArrivedAtNode', this.handleArrival, this);
 
-    // UI bar is 80px tall — extend the map bounds downward by that amount
-    // so the camera can scroll down far enough to bring bottom nodes
-    // up above the UI bar.
     const UI_BAR_H = 80;
-    // Large bounds so player can scroll to any node when zoomed in
-    this.cameras.main.setBounds(-640, -360, 2560, 1440 + UI_BAR_H);
-    // Centre camera on the middle of the map (where spiral is centred)
-    this.cameras.main.centerOn(640, 360);
+    // Camera bounds span the full generated map (doubled for scroll room)
+    const bW = this._mapW * 2;
+    const bH = this._mapH * 2;
+    this.cameras.main.setBounds(
+      -this._mapW / 2, -this._mapH / 2,
+      bW, bH + UI_BAR_H
+    );
+    this.cameras.main.centerOn(this._mapW / 2, this._mapH / 2);
     this.cursors = this.input.keyboard.createCursorKeys();
     // { capture: false } means Phaser won't stopPropagation on these keys,
     // so they keep working even when other scenes are running on top.
@@ -125,14 +170,16 @@ export default class GameScene extends Phaser.Scene {
     const g = this.mapGfx;
     g.clear();
 
-    // Fill well beyond map bounds so zoom-out never shows engine background
+    const mW = this._mapW || 1280;
+    const mH = this._mapH || 720;
     g.fillStyle(0x080c14, 1);
-    g.fillRect(-1280, -720, 3840, 2160);
+    g.fillRect(-mW, -mH, mW * 4, mH * 4);
 
-    // Star field — covers full extended background
-    for (let i = 0; i < 400; i++) {
-      const sx = Math.floor(Math.random() * 2560) - 640;
-      const sy = Math.floor(Math.random() * 1440) - 360;
+    // Star field
+    const starCount = Math.round(300 + (mW * mH) / 4000);
+    for (let i = 0; i < starCount; i++) {
+      const sx = Math.floor(Math.random() * mW * 2) - mW / 2;
+      const sy = Math.floor(Math.random() * mH * 2) - mH / 2;
       const brightness = Math.random();
       const starColor = brightness > 0.8 ? 0xffffff : brightness > 0.5 ? 0xaabbdd : 0x445566;
       g.fillStyle(starColor, brightness * 0.8 + 0.2);
@@ -141,14 +188,14 @@ export default class GameScene extends Phaser.Scene {
 
     // Edges / paths
     g.lineStyle(2, 0x1a2a44, 1);
-    EDGES.forEach(({ from, to }) => {
+    (this._edges || []).forEach(({ from, to }) => {
       const a = this.nodeMap.get(from);
       const b = this.nodeMap.get(to);
       g.lineBetween(a.x, a.y, b.x, b.y);
     });
 
     // Nodes
-    NODES.forEach(node => {
+    (this._nodes || []).forEach(node => {
       const color  = this.nodeColor(node.type);
       const radius = node.type === 'molten' ? 14 : 11;
 
@@ -166,8 +213,25 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
+  // ── Team colours ─────────────────────────────────────────────────────
+  // Index 0 = player 1 (local human), 1..7 = AI opponents.
+  // 'neutral' is a separate faction (grey).
+  static PLAYER_COLORS = [
+    0x44aaff, // player1 — blue
+    0xff4455, // player2 — red
+    0x44ff88, // player3 — green
+    0xffcc22, // player4 — yellow
+    0xff88cc, // player5 — pink
+    0xcc66ff, // player6 — purple
+    0xff8844, // player7 — orange
+    0x22ddcc, // player8 — teal
+  ];
+
   teamColor(team) {
-    return { player: 0x44aaff, enemy: 0xff4455 }[team] || 0x888888;
+    if (team === 'neutral') return 0x888899;
+    // 'player' maps to index 0; 'player2'..'player8' map to 1..7
+    const idx = team === 'player' ? 0 : (parseInt(team.replace('player','')) - 1) || 0;
+    return GameScene.PLAYER_COLORS[idx] || 0x888888;
   }
 
   // ── Ownership ──────────────────────────────────────────────────────────

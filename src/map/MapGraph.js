@@ -36,13 +36,12 @@ function makeRng(seed) {
 }
 
 // ── Core generator ─────────────────────────────────────────────────────────
-export function generateMap(nodeCount = 14, seed = null) {
+export function generateMap(nodeCount = 14, seed = null, mapW = 1280, mapH = 720) {
   const usedSeed = seed ?? Math.floor(Math.random() * 999999);
   const rng      = makeRng(usedSeed);
 
-  // Map canvas dimensions — must match GameScene
-  const MAP_W    = 1280;
-  const MAP_H    = 720;
+  const MAP_W    = mapW;
+  const MAP_H    = mapH;
   const CX       = MAP_W / 2;
   const CY       = MAP_H / 2 - 20; // Slight upward bias so nodes clear the UI
 
@@ -50,8 +49,9 @@ export function generateMap(nodeCount = 14, seed = null) {
   // Archimedean spiral: r = a + b*theta
   // We add small random jitter so it doesn't look too mechanical
   const nodes = [];
-  const SPIRAL_SPREAD = 55;   // Gap between spiral arms
-  const JITTER        = 28;   // Max random offset per node
+  // Scale spiral spread with map size so planets spread across the canvas
+  const SPIRAL_SPREAD = Math.max(55, Math.sqrt(MAP_W * MAP_H) / 24);
+  const JITTER        = Math.round(SPIRAL_SPREAD * 0.5);
 
   const MIN_DIST = 110;  // Minimum px between any two nodes
 
@@ -121,7 +121,7 @@ export function generateMap(nodeCount = 14, seed = null) {
       .sort((a, b) => a.d - b.d);
 }
 
-  const CLOSE_THRESHOLD = 260;  // Max distance for bonus connections
+  const CLOSE_THRESHOLD = Math.max(260, Math.sqrt(MAP_W * MAP_H) / 5);
 
   nodes.forEach((node, i) => {
     const sorted = neighbours(i);
@@ -197,10 +197,19 @@ export function generateMap(nodeCount = 14, seed = null) {
   return { nodes, edges, seed: usedSeed };
 }
 
-// ── Static exports (generated once on load, reused by all importers) ────────
-const _map    = generateMap(14);
-export const NODES = _map.nodes;
-export const EDGES = _map.edges;
+/**
+ * Returns { nodes, edges, mapW, mapH } for a given player count.
+ * planetCount = 10 + playerCount * 10
+ * Map size scales so density stays comfortable.
+ */
+export function generateMapForPlayers(playerCount = 1) {
+  const nodeCount = 10 + playerCount * 10;
+  // Scale map: base 1280×720, grow by ~400×225 per additional player beyond 1
+  const mapW = Math.round(1280 + Math.max(0, playerCount - 1) * 400);
+  const mapH = Math.round(720  + Math.max(0, playerCount - 1) * 225);
+  const result = generateMap(nodeCount, null, mapW, mapH);
+  return { ...result, mapW, mapH };
+}
 
 /**
  * Build an adjacency map from the edge list.
