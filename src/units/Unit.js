@@ -86,6 +86,7 @@ export default class Unit extends Phaser.GameObjects.Container {
     this.speed       = 90;
     this.isSelected  = false;
     this.isMoving    = false;
+    this._dead       = false;  // set to true immediately by removeStack
 
     // Composition — default to all fighters if not specified
     this.composition = composition || { ...emptyComposition(), fighter: stackSize };
@@ -193,7 +194,7 @@ export default class Unit extends Phaser.GameObjects.Container {
   }
 
   update(nodeMap, delta) {
-    if (!this.isMoving || !this.targetNode) return;
+    if (this._dead || !this.isMoving || !this.targetNode) return;
 
     const target = nodeMap.get(this.targetNode);
     if (!target) return;
@@ -211,7 +212,11 @@ export default class Unit extends Phaser.GameObjects.Container {
       this.isMoving    = false;
 
       this.scene.events.emit('unitArrivedAtNode', this, this.currentNode);
-      if (this.path.length > 0) this._advanceToNextNode();
+      // Guard: handleArrival may have destroyed this unit synchronously.
+      // _dead is set immediately by removeStack — do not trust Phaser's .active
+      if (this.path.length > 0 && !this._dead) {
+        this._advanceToNextNode();
+      }
     } else {
       this.x += (dx / dist) * step;
       this.y += (dy / dist) * step;

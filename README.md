@@ -15,10 +15,12 @@ NodeGame/
 │   ├── main.js               # Phaser config + scene list
 │   ├── style.css
 │   ├── scenes/
-│   │   ├── BootScene.js      # Asset preloader
+│   │   ├── BootScene.js      # Asset preloader → routes to MainMenuScene
+│   │   ├── MainMenuScene.js  # Main menu — player count selector, start game
 │   │   ├── GameScene.js      # Game loop, map, input, combat, ownership, resources, production
 │   │   ├── UIScene.js        # Top/bottom HUD, resource tooltips, game-over overlay
-│   │   └── NodePanel.js      # Node Panel — unit management, planet info, buildings
+│   │   ├── NodePanel.js      # Node Panel — unit management, planet info, buildings
+│   │   └── TooltipScene.js   # Keyword tooltip overlay — ship stat cards on hover
 │   ├── map/
 │   │   └── MapGraph.js       # Procedural spiral map generator + BFS pathfinding
 │   └── units/
@@ -48,26 +50,39 @@ NodeGame/
 
 Each stack holds a **composition** of multiple ship types. The badge on the stack shows the highest-tier ship present plus the total count.
 
-| Ship | Icon | Special Rule |
-|---|---|---|
-| Fighter | Single triangle | Basic ship — produced by Naval Base |
-| Destroyer | Twin peaks | Pre-strike: kills 2 enemy ships before combat resolves |
-| Cruiser | Two diagonal bars `//` | Support ship — role TBD |
-| Dreadnaught | Double fast-forward triangles | Heavy ship — role TBD |
-| Flagship | Diamond with bright core | One per player — if destroyed, you lose the game |
+| Ship | Attack | Health | Special Rule |
+|---|---|---|---|
+| Fighter | 1 | 1 | Basic unit — first to die in combat |
+| Destroyer | 1 | 1 | **Pre-strike:** kills 2 enemy fighters before combat resolves |
+| Cruiser | 1 | 1 | **Repair:** 50% chance to return after being destroyed |
+| Dreadnaught | 4 | 4 | Counts as 4 units — requires 4 damage to destroy |
+| Flagship | 1 | 1 | One per player — if destroyed, you lose the game immediately |
 
-**Flagship loss:** When a flagship is destroyed, all player units are removed from the map, all owned planets are lost, and a defeat screen is shown.
+Hover any ship name in the **Unit Management panel** or **Build Modal** to see a full stat card for that ship type.
 
 ## ⚔ Combat
 
-When a stack arrives at an enemy-occupied node:
-1. **Destroyer pre-strike** — each destroyer kills 2 enemy ships (fighters first, then others)
-2. **Standard combat** — larger stack wins; winner loses units equal to the loser's full stack size
-3. Losses are removed from the lowest-tier ships first
+When a stack arrives at an enemy-occupied node, combat resolves in three phases:
 
-Ties after pre-strike go to the attacker. Mutual destruction is possible.
+1. **Destroyer pre-strike** — each destroyer kills 2 enemy fighters (or next lowest tier) before the main phase
+2. **Simultaneous attack** — both sides deal their full attack power at once. Damage is applied lowest-tier first: fighters → destroyers → cruisers → dreadnaughts → flagship. Dreadnaughts have 4 health and require 4 damage to destroy
+3. **Cruiser repair** — each cruiser destroyed in the main phase has a 50% chance of repairing and returning to the stack
+
+If both stacks survive, the attacker retreats and the defender holds the node. Mutual destruction is possible.
 
 Friendly stacks arriving at the same node **merge** — their compositions are combined.
+
+**Flagship loss:** When a flagship is destroyed, all player units are removed, all owned planets are lost, and a defeat screen is shown.
+
+## 🌐 Multiplayer Setup
+
+From the main menu, select 1–8 players before starting. The map scales with player count:
+
+- **Node count:** `10 + (playerCount × 10)`
+- **Map size:** grows by ~400 × 225px per additional player
+- Each player spawns with 2 adjacent planets — 1 flagship + 10 fighters on the home planet, 10 fighters on the adjacent planet
+- All unclaimed planets start with a neutral garrison of 10 fighters
+- Players are colour-coded (blue, red, green, yellow, pink, purple, orange, teal)
 
 ## 🪐 Planet Types
 
@@ -85,17 +100,17 @@ Base food/metal/fuel values per planet always sum to 10. Buildings add on top.
 ## 🗺 Map Generation
 
 Procedurally generated each playthrough using an Archimedean spiral:
-- 14 planets placed along the spiral, minimum 110px spacing
+- Planet count and map dimensions scale with player count
+- Minimum spacing between planets scales with map size
 - Planet names generated from randomised syllable combinations
 - Every planet guaranteed at least one edge to its nearest neighbour
 - Additional connections added randomly; full connectivity via BFS bridge detection
-
-Refresh the page to regenerate the map.
+- Each player's two starting planets are always directly adjacent on the graph
 
 ## 🏳 Planet Ownership
 
 - A planet is owned by whichever team has the most units present
-- Shown as coloured concentric rings (blue = player, red = enemy)
+- Shown as coloured concentric rings matching the player's team colour
 - Ownership persists when units leave; changes only when the opposing team arrives in force
 - Only player-owned planets can have buildings constructed on them
 
@@ -115,14 +130,16 @@ Constructed via the **Build Modal** in the Node Panel. Each building costs resou
 
 ### Production Buildings (unit factories)
 
-| Building | Cost | Output |
+| Building | Cost (food/metal/fuel) | Output |
 |---|---|---|
 | Naval Base | 50 / 50 / 50 | +1 Fighter every 15s |
 | Destroyer Factory | 100 / 100 / 100 | +1 Destroyer every 30s |
 | Cruiser Factory | 200 / 200 / 200 | +1 Cruiser every 30s |
 | Dreadnaught Factory | 300 / 300 / 300 | +1 Dreadnaught every 30s |
 
-Each factory card shows a circular progress arc (top-right corner) tracking time until the next ship. Produced ships are added to the largest idle friendly stack at the node, or a new stack of 1 is spawned if none exist.
+Each factory card shows a circular progress arc tracking time until the next ship. Produced ships are added to the largest idle friendly stack at the node, or a new stack of 1 is spawned if none exist.
+
+Hover the unit name or output text on any factory card to see a full stat card for that ship type.
 
 ### Resource Buildings
 
@@ -148,7 +165,7 @@ Resource costs shown in **red** in the Build Modal when unaffordable. Already-bu
 ### Node Panel *(opens on clicking any node)*
 - **Left — Unit Management:**
   - Stack selector tabs (if multiple stacks are present)
-  - Per-ship-type rows: icon · type name · count
+  - Per-ship-type rows: icon · type name (hoverable for stat card) · count
   - `− n +` controls per ship type to compose a split
   - Running split total + **SPLIT & MOVE** button
 - **Right — Planet Info & Buildings:**
@@ -158,8 +175,12 @@ Resource costs shown in **red** in the Build Modal when unaffordable. Already-bu
 
 ### Build Modal *(opens from "Add Building" card)*
 - 7 building options in a 2-row grid
+- Unit name and output text on factory cards are hoverable — shows full ship stat card
 - Resource costs highlighted red if unaffordable
 - Already-built buildings dimmed and unselectable
+
+### Tooltip Cards *(hover any highlighted ship name)*
+Each tooltip shows the ship's icon (matching the factory card icon), role, attack/health stats, any special rules, and a description. Tooltips auto-anchor below the cursor and clamp to screen edges.
 
 ## 🌐 Deployment
 

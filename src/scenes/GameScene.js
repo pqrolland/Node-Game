@@ -134,6 +134,7 @@ export default class GameScene extends Phaser.Scene {
     this.previewGfx = this.add.graphics().setDepth(5);
     this.scene.launch('UIScene');
     this.scene.launch('NodePanel');
+    this.scene.launch('TooltipScene');
 
     // Listen for split requests from NodePanel
     this.game.events.on('splitStack', this.handleSplit, this);
@@ -159,7 +160,7 @@ export default class GameScene extends Phaser.Scene {
 
   update(time, delta) {
     this.handleCameraScroll();
-    this.units.forEach(u => u.update(this.nodeMap, delta));
+    this.units.forEach(u => { if (!u._dead) u.update(this.nodeMap, delta); });
     this._tickResources(delta);
     this._tickUnitProduction(delta);
   }
@@ -397,24 +398,35 @@ export default class GameScene extends Phaser.Scene {
   // ── Combat / arrival ───────────────────────────────────────────────────
 
   handleArrival(unit, nodeId) {
-    // Collect all OTHER stacks already resting on this node
+    // Snapshot others BEFORE combat — combat may remove units mid-loop
     const others = this.units.filter(u => u !== unit && u.currentNode === nodeId && !u.isMoving);
 
-    others.forEach(other => {
+    for (const other of others) {
+      // If the arriving unit was destroyed in a prior iteration, stop immediately
+      if (!this.units.includes(unit)) break;
+      // If this opponent was already destroyed, skip it
+      if (!this.units.includes(other)) continue;
+
       if (other.team === unit.team) {
         this.mergeStacks(unit, other);
       } else {
         this.resolveCombat(unit, other);
       }
-    });
+    }
 
-    this.updateOwnership(nodeId);
-    this.updateHUD();
-    this.scene.get('UIScene').logEvent(
-      unit.team === 'player'
-        ? `Stack arrived at ${this.nodeMap.get(nodeId).label}`
-        : `Enemy reached ${this.nodeMap.get(nodeId).label}!`
-    );
+    // Only log arrival if the unit survived (it may have been destroyed in combat)
+    if (this.units.includes(unit)) {
+      this.updateOwnership(nodeId);
+      this.updateHUD();
+      this.scene.get('UIScene').logEvent(
+        unit.team === 'player'
+          ? `Stack arrived at ${this.nodeMap.get(nodeId).label}`
+          : `Enemy reached ${this.nodeMap.get(nodeId).label}!`
+      );
+    } else {
+      this.updateOwnership(nodeId);
+      this.updateHUD();
+    }
   }
 
   mergeStacks(arriving, stationary) {
@@ -431,81 +443,150 @@ export default class GameScene extends Phaser.Scene {
     );
   }
 
+  // ── Combat power helpers ────────────────────────────────────────────────
+  // Returns total attack power of a composition.
+  // Dreadnaughts count as 4; all others count as 1.
+  _attackPower(comp) {
+    return (comp.fighter    || 0) * 1
+         + (comp.destroyer  || 0) * 1
+         + (comp.cruiser    || 0) * 1
+         + (comp.dreadnaught|| 0) * 4
+         + (comp.flagship   || 0) * 1;
+  }
+
+  // Apply `damage` to a composition, targeting lowest-tier ships first.
+  // Priority: fighter → destroyer → cruiser → dreadnaught → flagship.
+  // Dreadnaughts have 4 hp, so cost 4 damage to kill.
+  // Returns an object { killed } with a copy of removed ships (for repair roll).
+  _applyDamage(comp, damage) {
+    const killed = { fighter: 0, destroyer: 0, cruiser: 0, dreadnaught: 0, flagship: 0 };
+    let dmg = damage;
+
+    // Fighters: 1 hp each
+    { const take = Math.min(comp.fighter || 0, Math.floor(dmg));
+      comp.fighter = (comp.fighter || 0) - take; killed.fighter += take; dmg -= take; }
+    if (dmg <= 0) return killed;
+
+    // Destroyers: 1 hp each
+    { const take = Math.min(comp.destroyer || 0, Math.floor(dmg));
+      comp.destroyer = (comp.destroyer || 0) - take; killed.destroyer += take; dmg -= take; }
+    if (dmg <= 0) return killed;
+
+    // Cruisers: 1 hp each
+    { const take = Math.min(comp.cruiser || 0, Math.floor(dmg));
+      comp.cruiser = (comp.cruiser || 0) - take; killed.cruiser += take; dmg -= take; }
+    if (dmg <= 0) return killed;
+
+    // Dreadnaughts: 4 hp each — only whole dreadnaughts are removed.
+    // Partial damage carries over but doesn't kill a dreadnaught.
+    if (comp.dreadnaught > 0) {
+      const fullKills = Math.floor(dmg / 4);
+      const take = Math.min(comp.dreadnaught || 0, fullKills);
+      comp.dreadnaught = (comp.dreadnaught || 0) - take; killed.dreadnaught += take; dmg -= take * 4;
+    }
+    if (dmg < 4) return killed; // Not enough to kill another dreadnaught
+
+    // Flagship: 1 hp
+    { const take = Math.min(comp.flagship || 0, Math.floor(dmg));
+      comp.flagship = (comp.flagship || 0) - take; killed.flagship += take; }
+
+    return killed;
+  }
+
+  // Roll cruiser repairs — each killed cruiser has 50% chance of returning.
+  _rollCruiserRepairs(comp, killed) {
+    let repaired = 0;
+    for (let i = 0; i < (killed.cruiser || 0); i++) {
+      if (Math.random() < 0.5) { comp.cruiser = (comp.cruiser || 0) + 1; repaired++; }
+    }
+    return repaired;
+  }
+
   resolveCombat(attacker, defender) {
     const ui = this.scene.get('UIScene');
     let logMsg = '';
 
-    // ── Destroyer pre-strike: each destroyer kills 2 enemy fighters first ──
+    // ── Phase 1: Destroyer pre-strike ────────────────────────────────────
+    // Each destroyer eliminates 2 enemy fighters before combat.
     const applyDestroyerStrike = (striker, target) => {
       const destroyers = striker.composition.destroyer || 0;
       if (destroyers === 0) return;
-      const kills = destroyers * 2;
-      // Remove fighters first, then other types from target
-      let remaining = kills;
-      for (const type of ['fighter','cruiser','dreadnaught']) {
-        const take = Math.min(target.composition[type] || 0, remaining);
-        target.composition[type] -= take;
-        remaining -= take;
-        if (remaining <= 0) break;
+      let kills = destroyers * 2;
+      // Remove fighters first, then destroyers, then cruisers (pre-strike only touches low tier)
+      for (const type of ['fighter', 'destroyer', 'cruiser']) {
+        const take = Math.min(target.composition[type] || 0, kills);
+        target.composition[type] = (target.composition[type] || 0) - take;
+        kills -= take;
+        if (kills <= 0) break;
       }
-      target.stackSize = compositionTotal(target.composition);
-      if (kills > 0) logMsg += ` Destroyers eliminated ${kills - remaining} ships.`;
+      const struck = destroyers * 2 - kills;
+      if (struck > 0) logMsg += ` Destroyers pre-struck ${struck}.`;
     };
 
     applyDestroyerStrike(attacker, defender);
     applyDestroyerStrike(defender, attacker);
-
-    // ── Check if either side wiped out already ────────────────────────────
     attacker.stackSize = compositionTotal(attacker.composition);
     defender.stackSize = compositionTotal(defender.composition);
 
-    if (attacker.stackSize <= 0 && defender.stackSize <= 0) {
-      ui.logEvent('⚔ Mutual destruction!' + logMsg);
+    // Early exit if pre-strike wiped a side
+    if (attacker.stackSize <= 0 || defender.stackSize <= 0) {
+      const aWon = defender.stackSize <= 0 && attacker.stackSize > 0;
+      const dWon = attacker.stackSize <= 0 && defender.stackSize > 0;
+      if (aWon) {
+        ui.logEvent(`⚔ Attacker wins on pre-strike!${logMsg}`);
+        this._handleStackDestroyed(defender);
+        this.updateOwnership(attacker.currentNode);
+      } else if (dWon) {
+        ui.logEvent(`⚔ Defender wins on pre-strike!${logMsg}`);
+        this._handleStackDestroyed(attacker);
+        this.updateOwnership(defender.currentNode);
+      } else {
+        ui.logEvent(`⚔ Mutual destruction on pre-strike!${logMsg}`);
+        this._handleStackDestroyed(attacker);
+        this._handleStackDestroyed(defender);
+      }
+      if (!attacker._dead) attacker.updateBadge();
+      if (!defender._dead) defender.updateBadge();
+      this.updateHUD(); return;
+    }
+
+    const atkPow = this._attackPower(attacker.composition);
+    const defPow = this._attackPower(defender.composition);
+
+    const atkKilled = this._applyDamage(defender.composition, atkPow);
+    const defKilled = this._applyDamage(attacker.composition, defPow);
+
+    const atkRepaired = this._rollCruiserRepairs(attacker.composition, defKilled);
+    const defRepaired = this._rollCruiserRepairs(defender.composition, atkKilled);
+
+    attacker.stackSize = compositionTotal(attacker.composition);
+    defender.stackSize = compositionTotal(defender.composition);
+    attacker.updateBadge();
+    defender.updateBadge();
+
+    if (atkRepaired > 0) logMsg += ` ${atkRepaired} attacker cruiser(s) repaired.`;
+    if (defRepaired > 0) logMsg += ` ${defRepaired} defender cruiser(s) repaired.`;
+
+    const atkAlive = attacker.stackSize > 0;
+    const defAlive = defender.stackSize > 0;
+
+    if (!atkAlive && !defAlive) {
+      ui.logEvent(`⚔ Mutual destruction!${logMsg}`);
       this._handleStackDestroyed(attacker);
       this._handleStackDestroyed(defender);
-      return;
-    }
-    if (defender.stackSize <= 0) {
-      defender.updateBadge();
-      attacker.updateBadge();
-      ui.logEvent(`⚔ Attacker wins after destroyer strike!` + logMsg);
+    } else if (!defAlive) {
+      ui.logEvent(`⚔ Attacker wins — ${attacker.stackSize} remain.${logMsg}`);
       this._handleStackDestroyed(defender);
       this.updateOwnership(attacker.currentNode);
-      this.updateHUD();
-      return;
-    }
-    if (attacker.stackSize <= 0) {
-      attacker.updateBadge();
-      defender.updateBadge();
-      ui.logEvent(`⚔ Defender wins after destroyer strike!` + logMsg);
+    } else if (!atkAlive) {
+      ui.logEvent(`⚔ Defender holds — ${defender.stackSize} remain.${logMsg}`);
       this._handleStackDestroyed(attacker);
       this.updateOwnership(defender.currentNode);
-      this.updateHUD();
-      return;
+    } else {
+      // Both survived — attacker retreats (didn't take the node)
+      ui.logEvent(`⚔ Both sides bloodied — atk ${attacker.stackSize} vs def ${defender.stackSize}.${logMsg}`);
+      this.updateOwnership(defender.currentNode);
     }
-
-    // ── Standard combat: larger stack wins ───────────────────────────────
-    const [winner, loser] = attacker.stackSize >= defender.stackSize
-      ? [attacker, defender]
-      : [defender, attacker];
-
-    // Remove units from winner equal to loser's full size (highest-tier first)
-    let losses = loser.stackSize;
-    for (const type of ['fighter','cruiser','destroyer','dreadnaught','flagship']) {
-      const take = Math.min(winner.composition[type] || 0, losses);
-      winner.composition[type] -= take;
-      losses -= take;
-      if (losses <= 0) break;
-    }
-    winner.updateBadge();
-
-    const winnerAlive = winner.stackSize > 0;
-    logMsg += ` ⚔ ${winner.team === 'player' ? 'Player' : 'Enemy'} wins with ${winner.stackSize} remaining.`;
-    ui.logEvent(logMsg.trim());
-
-    this._handleStackDestroyed(loser);
-    if (!winnerAlive) this._handleStackDestroyed(winner);
-    else this.updateOwnership(winner.currentNode);
     this.updateHUD();
   }
 
@@ -567,6 +648,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   removeStack(unit) {
+    unit._dead = true;  // flag immediately so in-flight update() guards see it
     this.units = this.units.filter(u => u !== unit);
     if (this.selectedStack === unit) this.deselectAll();
     unit.destroy();

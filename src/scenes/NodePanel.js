@@ -24,7 +24,7 @@ export const BUILDING_DEFS = {
   naval_base: {
     id:     'naval_base',
     name:   'Naval Base',
-    output: '+1 unit / 15s',
+    output: '+1 Fighter / 15s',
     cost: { food: 50, metal: 50, fuel: 50 },
     buildTime: 15000,
     drawIcon(gfx, cx, cy) {
@@ -700,20 +700,29 @@ export default class NodePanel extends Phaser.Scene {
       drawOptBg(false);
       this._modalOptions.add(og);
 
-      // Name — dimmed if built
-      this._modalOptions.add(this.add.text(ox + OPT_W / 2, oy + 52, def.name, {
+      // Name — hoverable keyword for factory buildings
+      const PRODUCES_SHIP = {
+        naval_base: 'fighter', destroyer_factory: 'destroyer',
+        cruiser_factory: 'cruiser', dreadnaught_factory: 'dreadnaught',
+      };
+      const producesKey = PRODUCES_SHIP[bldId];
+      const nameTxt = this.add.text(ox + OPT_W / 2, oy + 52, def.name, {
         font: 'bold 11px monospace',
-        color: alreadyBuilt ? '#334455' : '#aaccff',
+        color: alreadyBuilt ? '#334455' : (producesKey ? '#aaccff' : '#aaccff'),
         wordWrap: { width: OPT_W - 8 }, align: 'center'
-      }).setOrigin(0.5, 0));
+      }).setOrigin(0.5, 0);
 
-      // "Already built" label OR output description
-      this._modalOptions.add(this.add.text(ox + OPT_W / 2, oy + 70,
+      this._modalOptions.add(nameTxt);
+
+      // Output — also hoverable for factory buildings (producesKey already set above)
+      const outputTxt = this.add.text(ox + OPT_W / 2, oy + 70,
         alreadyBuilt ? '— Already built —' : def.output, {
         font: '10px monospace',
         color: alreadyBuilt ? '#334455' : '#7799bb',
         wordWrap: { width: OPT_W - 8 }, align: 'center'
-      }).setOrigin(0.5, 0));
+      }).setOrigin(0.5, 0);
+
+      this._modalOptions.add(outputTxt);
 
       // Divider
       const divGfx = this.add.graphics();
@@ -768,13 +777,42 @@ export default class NodePanel extends Phaser.Scene {
       const zone = this.add.rectangle(ox, oy, OPT_W, OPT_H, 0xffffff, 0)
         .setOrigin(0, 0).setInteractive({ useHandCursor: !disabled });
       zone.on('pointerover', () => { if (!disabled) drawOptBg(true); });
-      zone.on('pointerout',  () => { if (!disabled) drawOptBg(false); });
+      zone.on('pointerout',  () => {
+        if (!disabled) drawOptBg(false);
+        if (producesKey) { nameTxt.setColor('#aaccff'); outputTxt.setColor('#7799bb'); this.game.events.emit('hideTooltip'); }
+      });
       zone.on('pointerdown', () => {
         if (disabled) return;
         this._addBuilding(bldId);
         this._closeModal();
       });
       this._modalOptions.add(zone);
+
+      // Tooltip hit zone — layered on TOP of click zone, covering name + output text only
+      if (producesKey && !alreadyBuilt) {
+        const ttZone = this.add.rectangle(ox, oy + 46, OPT_W, 36, 0xffffff, 0)
+          .setOrigin(0, 0).setInteractive({ useHandCursor: true });
+        ttZone.on('pointerover', () => {
+          nameTxt.setColor('#ffffff');
+          outputTxt.setColor('#ffffff');
+          const ptr = this.input.activePointer;
+          this.game.events.emit('showTooltip', { key: producesKey, x: ptr.x, y: ptr.y });
+        });
+        ttZone.on('pointermove', () => {
+          const ptr = this.input.activePointer;
+          this.game.events.emit('showTooltip', { key: producesKey, x: ptr.x, y: ptr.y });
+        });
+        ttZone.on('pointerout', () => {
+          nameTxt.setColor('#aaccff');
+          outputTxt.setColor('#7799bb');
+          this.game.events.emit('hideTooltip');
+        });
+        ttZone.on('pointerdown', () => {
+          // Still trigger the build on click
+          if (!disabled) { this._addBuilding(bldId); this._closeModal(); }
+        });
+        this._modalOptions.add(ttZone);
+      }
     });
   }
 
@@ -959,10 +997,24 @@ export default class NodePanel extends Phaser.Scene {
       drawShipIcon(iconG, type, x + 9, rowY + 12, info.color);
       this.stackListContainer.add(iconG);
 
-      // Ship type label + count
-      this.stackListContainer.add(this.add.text(x + 22, rowY + 4, info.label, {
+      // Ship type label — hoverable keyword
+      const labelTxt = this.add.text(x + 22, rowY + 4, info.label, {
         font: '10px monospace', color: '#aaccff'
-      }));
+      }).setInteractive({ useHandCursor: true });
+      labelTxt.on('pointerover', () => {
+        labelTxt.setColor('#ffffff');
+        const ptr = this.input.activePointer;
+        this.game.events.emit('showTooltip', { key: type, x: ptr.x, y: ptr.y });
+      });
+      labelTxt.on('pointermove', () => {
+        const ptr = this.input.activePointer;
+        this.game.events.emit('showTooltip', { key: type, x: ptr.x, y: ptr.y });
+      });
+      labelTxt.on('pointerout', () => {
+        labelTxt.setColor('#aaccff');
+        this.game.events.emit('hideTooltip');
+      });
+      this.stackListContainer.add(labelTxt);
       this.stackListContainer.add(this.add.text(x + 22, rowY + 16, `${count} total`, {
         font: '9px monospace', color: '#556688'
       }));
