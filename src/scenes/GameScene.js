@@ -1,4 +1,5 @@
 import Unit, { emptyComposition, compositionTotal, dominantType } from '../units/Unit.js';
+import AsteroidManager from '../asteroids/AsteroidManager.js';
 import { generateMapForPlayers, buildAdjacency, findPath } from '../map/MapGraph.js';
 
 export default class GameScene extends Phaser.Scene {
@@ -91,6 +92,17 @@ export default class GameScene extends Phaser.Scene {
       }
     });
 
+    // ── Asteroid manager ──────────────────────────────────────────────
+    this.asteroidManager = new AsteroidManager(this, this._mapW, this._mapH, this.nodeMap);
+
+    // ── Asteroid click → open panel ───────────────────────────────────────
+    this.game.events.on('openAsteroid', ({ asteroid }) => {
+      this.game.events.emit('openAsteroidPanel', { asteroid });
+    });
+    this.game.events.on('openMiner', ({ miner }) => {
+      this.game.events.emit('openMinerPanel', { miner });
+    });
+
     // Invisible click zones over each node
     this._nodes.forEach(node => {
       const zone = this.add.circle(node.x, node.y, 28, 0xffffff, 0)
@@ -161,6 +173,7 @@ export default class GameScene extends Phaser.Scene {
   update(time, delta) {
     this.handleCameraScroll();
     this.units.forEach(u => { if (!u._dead) u.update(this.nodeMap, delta); });
+    this.asteroidManager?.update(delta);
     this._tickResources(delta);
     this._tickUnitProduction(delta);
   }
@@ -671,6 +684,7 @@ export default class GameScene extends Phaser.Scene {
       destroyer_factory:     {},
       cruiser_factory:       {},
       dreadnaught_factory:   {},
+      asteroid_mine:         {},
     };
 
     const bonus = BONUSES[bldId] || {};
@@ -692,6 +706,11 @@ export default class GameScene extends Phaser.Scene {
       if (!this.unitProduction.has(key)) {
         this.unitProduction.set(key, { elapsed: 0, duration: prod.duration, shipType: prod.shipType, nodeId, arcG: null, drawArc: null });
       }
+    }
+
+    // Spawn asteroid miner unit when mine is built
+    if (bldId === 'asteroid_mine') {
+      this.asteroidManager?.addMiner(nodeId);
     }
 
     // Notify NodePanel to refresh its resource display

@@ -1,6 +1,6 @@
 # Node Game
 
-A space-themed real-time strategy game built with Phaser 3. Command fleets of ships across a procedurally generated star map, capture planets, manage resources, construct buildings, and produce new ship types to crush the enemy.
+A space-themed real-time strategy game built with Phaser 3. Command fleets of ships across a procedurally generated star map, capture planets, manage resources, construct buildings, produce new ship types, and defend against asteroid and meteor threats.
 
 ## 🚀 Quick Start
 
@@ -19,12 +19,15 @@ NodeGame/
 │   │   ├── MainMenuScene.js  # Main menu — player count selector, start game
 │   │   ├── GameScene.js      # Game loop, map, input, combat, ownership, resources, production
 │   │   ├── UIScene.js        # Top/bottom HUD, resource tooltips, game-over overlay
-│   │   ├── NodePanel.js      # Node Panel — unit management, planet info, buildings
-│   │   └── TooltipScene.js   # Keyword tooltip overlay — ship stat cards on hover
+│   │   ├── NodePanel.js      # Node Panel — unit management, planet info, buildings, asteroid info
+│   │   └── TooltipScene.js   # Keyword tooltip overlay — ship and unit stat cards on hover
 │   ├── map/
 │   │   └── MapGraph.js       # Procedural spiral map generator + BFS pathfinding
-│   └── units/
-│       └── Unit.js           # Stack class with ship composition, icons, movement
+│   ├── units/
+│   │   └── Unit.js           # Stack class with ship composition, icons, movement
+│   └── asteroids/
+│       ├── AsteroidManager.js  # Spawns and updates all asteroids; owns AsteroidMiner list
+│       └── AsteroidMiner.js    # Autonomous mining unit — intercepts asteroids and meteors
 ├── Assets/
 │   ├── sprites/
 │   ├── maps/
@@ -42,6 +45,7 @@ NodeGame/
 | Hover another node while selected | Preview path |
 | Click destination node while selected | Move stack along shortest path |
 | Click the same node again while selected | Open Node Panel |
+| Click an asteroid | Open asteroid info in Node Panel |
 | ESC | Deselect stack |
 | WASD / Arrow keys | Scroll camera |
 | Scroll wheel | Zoom in / out |
@@ -124,6 +128,47 @@ Every **3 seconds**, resources are collected from all player-owned planets.
 
 Hover any resource icon in the top bar to see a scrollable per-planet breakdown tooltip.
 
+## ☄ Asteroids
+
+Every **3 seconds**, a new asteroid spawns on a random map edge and travels across the map at 60 px/s. There are three types:
+
+| Type | Colour | Resources | Behaviour |
+|---|---|---|---|
+| Asteroid | Grey | 100 (random split) | Drifts across map in a random inward direction. Despawns at the far edge. |
+| Rich Asteroid | Gold | 300 (random split) | Same as above — rarer, higher yield. |
+| Meteor | Red | 100 (random split) | Targets the **farthest planet** from its spawn point, giving maximum reaction time. On arrival: **30% chance to destroy each unit** at the target. Cruiser Repair rule applies (50% rebuild). |
+
+Resources on all three types are randomly distributed between food, metal, and fuel each spawn.
+
+Click any asteroid to open its info in the Node Panel — shows resource breakdown, type description, and for meteors, the target planet name and impact rules.
+
+Spawn rates: 60% regular asteroid, 25% rich asteroid, 15% meteor.
+
+## ⛏ Asteroid Miners
+
+Build an **Asteroid Miner** on any player-owned planet to deploy an autonomous mining unit.
+
+- The miner cannot be moved, split, or destroyed
+- It does not count toward the combat unit tally
+- A faint cyan radius ring appears around the planet — dim normally, bright when the planet is selected — showing the miner's patrol range (160 px)
+
+**State machine:**
+
+| State | Behaviour |
+|---|---|
+| Idle | Waiting at home planet, scanning for asteroids in range |
+| En Route | Flying toward a claimed asteroid or meteor at 90 px/s |
+| Mining | Attached to the asteroid — fully mines it over 4 seconds |
+| Returning | Flying back to deposit cargo |
+
+**Meteor intercept:** Miners treat meteors as valid (and priority) targets. A miner that successfully mines a meteor before it reaches its destination cancels the impact entirely. Meteors targeting the miner's own home planet are prioritised above all other targets.
+
+**Deposit:** When the miner returns, resources are added to the player's bank and logged in the event log. If an asteroid drifts out of range while being mined, the miner collects whatever resources remain and returns early.
+
+Hover **Miner 1** (or any miner entry) in the **Planet Units** section of the Node Panel to see the full Asteroid Miner stat card. The same tooltip is available on the **Asteroid Miner** card in the Build Modal.
+
+When an asteroid is clicked while a miner is attached to it, the left panel shows the miner's home planet and current state in a **Mining Unit** section.
+
 ## 🏗 Buildings
 
 Constructed via the **Build Modal** in the Node Panel. Each building costs resources, takes 15 seconds to build, and is limited to one per planet. A semi-transparent overlay shrinks upward over the card during construction. Bonuses apply the moment construction completes — even if the panel is closed.
@@ -149,6 +194,12 @@ Hover the unit name or output text on any factory card to see a full stat card f
 | Metal Extractor | 100 / 0 / 100 | +1 Metal per resource tick |
 | Fuel Extractor | 100 / 100 / 0 | +1 Fuel per resource tick |
 
+### Mining Buildings
+
+| Building | Cost (food/metal/fuel) | Output |
+|---|---|---|
+| Asteroid Miner | 150 / 200 / 150 | Deploys 1 autonomous mining unit |
+
 Resource costs shown in **red** in the Build Modal when unaffordable. Already-built buildings are greyed out.
 
 ## 🖥 HUD & UI
@@ -160,27 +211,31 @@ Resource costs shown in **red** in the Build Modal when unaffordable. Already-bu
 ### Bottom Bar
 - **Left:** Selected stack info
 - **Centre:** Control hints
-- **Right:** Event log (last 3 events — arrivals, combat, merges)
+- **Right:** Event log (last 3 events — arrivals, combat, merges, mining deposits, meteor intercepts)
 
-### Node Panel *(opens on clicking any node)*
+### Node Panel *(opens on clicking any node or asteroid)*
 - **Left — Unit Management:**
   - Stack selector tabs (if multiple stacks are present)
-  - Per-ship-type rows: icon · type name (hoverable for stat card) · count
-  - `− n +` controls per ship type to compose a split
+  - Per-ship-type rows: icon · type name (hoverable for stat card) · count · `− n +` split controls
   - Running split total + **SPLIT & MOVE** button
+  - **Planet Units** section below combat units — lists all Asteroid Miners assigned to this planet with their current state (hoverable for stat card)
 - **Right — Planet Info & Buildings:**
   - Planet name, type, resource bars with base + bonus annotations `(+N)`
   - Scrollable building cards (5 per row)
   - First card always shows the planet card
 
+When an **asteroid** is clicked instead of a planet:
+- Left panel shows the asteroid graphic, its type, and any miner currently attached in a **Mining Unit** section
+- Right panel shows the asteroid's name, status, resource yield bars, and behaviour description
+
 ### Build Modal *(opens from "Add Building" card)*
-- 7 building options in a 2-row grid
-- Unit name and output text on factory cards are hoverable — shows full ship stat card
+- 8 building options in a 2-row grid
+- Unit name and output text on factory and mining cards are hoverable — shows full unit stat card
 - Resource costs highlighted red if unaffordable
 - Already-built buildings dimmed and unselectable
 
-### Tooltip Cards *(hover any highlighted ship name)*
-Each tooltip shows the ship's icon (matching the factory card icon), role, attack/health stats, any special rules, and a description. Tooltips auto-anchor below the cursor and clamp to screen edges.
+### Tooltip Cards *(hover any highlighted unit name)*
+Each tooltip shows the unit's icon, role, stats, any special rules, and a description. Available for all ship types and the Asteroid Miner in every location where they are referenced — unit lists, build modal, and planet panels. Tooltips auto-anchor below the cursor and clamp to screen edges.
 
 ## 🌐 Deployment
 

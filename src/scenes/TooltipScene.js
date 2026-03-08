@@ -53,6 +53,25 @@ export const TOOLTIP_DEFS = {
     desc:  'Counts as 4 units in combat — attacks with power 4 and requires 4 damage to destroy. The most powerful standard unit.',
     role:  'Heavy Warship',
   },
+  asteroid_miner: {
+    name:  'Asteroid Miner',
+    color: '#44ffdd',
+    role:  'Autonomous Mining Unit',
+    stats: [
+      { label: 'Range',   value: '160px' },
+      { label: 'Speed',   value: '90 px/s' },
+      { label: 'Mine Time', value: '4 sec' },
+    ],
+    desc:  'Patrols its home planet radius. Intercepts asteroids and meteors, mines them fully, then returns resources to the planet. Cannot be moved or destroyed.',
+    drawCustomIcon(gfx, cx, cy, color) {
+      const s = 6;
+      gfx.fillStyle(color, 1);
+      gfx.fillTriangle(cx, cy - s, cx + s, cy, cx, cy + s);
+      gfx.fillTriangle(cx, cy - s, cx - s, cy, cx, cy + s);
+      gfx.fillStyle(0xffffff, 0.6);
+      gfx.fillCircle(cx, cy, 1.5);
+    },
+  },
   flagship: {
     name:  'Flagship',
     color: '#ffdd44',
@@ -135,11 +154,15 @@ export default class TooltipScene extends Phaser.Scene {
     // Parse color once
     const colorInt = Phaser.Display.Color.HexStringToColor(def.color.replace('#', '')).color;
 
-    // ── Draw ship icon (top-left of header) ──────────────────────────────
+    // ── Draw icon (top-left of header) ──────────────────────────────────
     const iconCX = PAD + ICON_SIZE / 2;
     const iconCY = PAD + ICON_SIZE / 2 + 1;
     this._iconGfx.clear();
-    drawShipIcon(this._iconGfx, key, iconCX, iconCY, colorInt);
+    if (def.drawCustomIcon) {
+      def.drawCustomIcon(this._iconGfx, iconCX, iconCY, colorInt);
+    } else {
+      drawShipIcon(this._iconGfx, key, iconCX, iconCY, colorInt);
+    }
 
     // ── Position name beside icon with guaranteed gap ─────────────────────
     this._nameText

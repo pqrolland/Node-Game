@@ -1,4 +1,5 @@
 import { drawShipIcon, SHIP_TYPES } from '../units/Unit.js';
+import { ASTEROID_DEFS } from '../asteroids/AsteroidManager.js';
 
 /**
  * NodePanel.js — Node management panel (bottom of screen).
@@ -134,6 +135,25 @@ export const BUILDING_DEFS = {
       gfx.fillTriangle(cx - 2, cy - 7, cx + 9, cy - 1, cx - 2, cy + 5);
     },
   },
+  asteroid_mine: {
+    id:       'asteroid_mine',
+    name:     'Asteroid Miner',
+    output:   'Adds +1 Asteroid Miner',
+    cost:     { food: 150, metal: 200, fuel: 150 },
+    buildTime: 15000,
+    drawIcon(gfx, cx, cy) {
+      // Diamond (miner) above a small asteroid circle
+      const s = 5;
+      gfx.fillStyle(0x44ffdd, 1);
+      gfx.fillTriangle(cx, cy - s - 4,  cx + s, cy - 4,  cx, cy + s - 4);
+      gfx.fillTriangle(cx, cy - s - 4,  cx - s, cy - 4,  cx, cy + s - 4);
+      // Small asteroid below
+      gfx.fillStyle(0x889999, 1);
+      gfx.fillCircle(cx, cy + 6, 4);
+      gfx.fillStyle(0xffffff, 0.15);
+      gfx.fillCircle(cx - 1, cy + 5, 1.5);
+    },
+  },
 };
 
 const DEFAULT_COST     = { food: 0, metal: 0, fuel: 0 };
@@ -239,6 +259,13 @@ export default class NodePanel extends Phaser.Scene {
 
     this.game.events.on('openNode',  this.open,  this);
     this.game.events.on('closeNode', this.close, this);
+    this.game.events.on('openAsteroidPanel', ({ asteroid }) => this.openAsteroid(asteroid));
+    this.game.events.on('asteroidMinerStateChanged', (asteroid) => {
+      if (this.isOpen && this._activeAsteroid === asteroid) {
+        this._refreshAsteroidInfo(this._activeAsteroid);
+      }
+    });
+    // Miner click-to-open disabled — use planet node or asteroid panel instead
 
     // Refresh resource bars when a building bonus is applied
     this.game.events.on('nodeResourcesUpdated', (nodeId) => {
@@ -268,7 +295,7 @@ export default class NodePanel extends Phaser.Scene {
     this.stackListContainer = this.add.container(0, 0);
     this.root.add(this.stackListContainer);
 
-    // Split total display + SPLIT & MOVE button
+    // Split controls — positions set dynamically in _refreshStackList after rows are drawn
     this.splitTotalText = this.add.text(x, y + 210, 'Split: 0 units', {
       font: '10px monospace', color: '#7aaa8a'
     });
@@ -281,6 +308,9 @@ export default class NodePanel extends Phaser.Scene {
       font: '10px monospace', color: '#223366'
     });
     this.root.add(this.splitHint);
+
+    // Track the static base y for the unit panel
+    this._unitPanelBaseY = y;
 
     // Track split amounts per type
     this._splitComp = { fighter: 0, destroyer: 0, cruiser: 0, dreadnaught: 0, flagship: 0 };
@@ -652,7 +682,7 @@ export default class NodePanel extends Phaser.Scene {
       b.startsWith('__constructing__') ? b.replace('__constructing__', '') : b
     );
 
-    const options = ['naval_base', 'destroyer_factory', 'cruiser_factory', 'dreadnaught_factory', 'farm', 'metal_extractor', 'fuel_extractor'];
+    const options = ['naval_base', 'destroyer_factory', 'cruiser_factory', 'dreadnaught_factory', 'farm', 'metal_extractor', 'fuel_extractor', 'asteroid_mine'];
     const OPT_W = 130, OPT_H = 168, OPT_GAP = 16;
     const COLS  = 4;
 
@@ -704,6 +734,7 @@ export default class NodePanel extends Phaser.Scene {
       const PRODUCES_SHIP = {
         naval_base: 'fighter', destroyer_factory: 'destroyer',
         cruiser_factory: 'cruiser', dreadnaught_factory: 'dreadnaught',
+        asteroid_mine: 'asteroid_miner',
       };
       const producesKey = PRODUCES_SHIP[bldId];
       const nameTxt = this.add.text(ox + OPT_W / 2, oy + 52, def.name, {
@@ -899,6 +930,7 @@ export default class NodePanel extends Phaser.Scene {
       node.buildings = ['__planet__'];
     }
 
+    this._activeAsteroid = null;
     this._refreshStackList();
     this._refreshNodeInfo();
     this._refreshBuildings();
@@ -907,13 +939,201 @@ export default class NodePanel extends Phaser.Scene {
     this.isOpen = true;
   }
 
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Asteroid info panel
+  // ══════════════════════════════════════════════════════════════════════════
+
+
+  openMiner(miner) {
+    // Open the node panel for the miner's home planet
+    const gs   = this.scene.get('GameScene');
+    const node = miner.homeNode;
+    const stacks = gs?.units?.filter(u => !u._dead && u.currentNode === node.id && !u.isMoving) || [];
+    this.open(node, stacks);
+  }
+
+  openAsteroid(asteroid) {
+    this.activeNode      = null;
+    this.activeStacks    = [];
+    this._activeAsteroid = asteroid;
+    this._splitComp   = { fighter: 0, destroyer: 0, cruiser: 0, dreadnaught: 0, flagship: 0 };
+
+    this._refreshAsteroidInfo(asteroid);
+    this.root.setVisible(true);
+    this.isOpen = true;
+  }
+
+  _refreshAsteroidInfo(asteroid) {
+    // Clear dynamic containers
+    this.stackListContainer.removeAll(true);
+    this.stackSelectorContainer.removeAll(true);
+    this.buildingScrollContainer.removeAll(true);
+
+    const def = asteroid.def;
+    const res = asteroid.resources;
+
+    // ── RIGHT PANEL: reuse the existing static node-info objects ──────────
+    // Name line — asteroid label
+    const COLOR_MAP = { regular: '#aabbcc', rich: '#ffdd44', meteor: '#ff6644' };
+    const col = COLOR_MAP[asteroid.type] || '#aabbcc';
+    this.nodeName.setText(def.label).setColor(col);
+
+    // Type subtitle — matches planet type line position
+    const typeLabels = { regular: 'RESOURCE · DRIFTING', rich: 'RARE RESOURCE · DRIFTING', meteor: 'HAZARD · INBOUND' };
+    this.nodeType.setText(typeLabels[asteroid.type] || '').setColor(col);
+
+    // Resource bars — show yield values scaled to the bar (max = total yield)
+    const total  = res.food + res.metal + res.fuel;
+    const maxVal = total || 1;
+    for (const [key, bar] of Object.entries(this.resBars)) {
+      const val = res[key] ?? 0;
+      bar.fill.width = Math.round((val / maxVal) * bar.barW);
+      bar.val.setText(`+${val}`);
+    }
+
+    // ── RIGHT PANEL scroll area: description + behaviour ──────────────────
+    // buildingScrollContainer is positioned at _bldScrollX, _bldScrollY
+    // Items added to it are relative to that origin (0,0 = scroll origin)
+    const lines = asteroid.type === 'meteor'
+      ? [
+          { text: 'TARGET', header: true },
+          { text: asteroid.targetNode?.label || 'Unknown', header: false },
+          { text: '', header: false },
+          { text: 'ON IMPACT', header: true },
+          { text: '30% chance to destroy each unit', header: false },
+          { text: 'at the target planet on arrival.', header: false },
+          { text: '', header: false },
+          { text: 'Cruiser Repair applies: 50%', header: false },
+          { text: 'chance to rebuild on destruction.', header: false },
+          { text: '', header: false },
+          { text: def.desc, header: false, wrap: true },
+        ]
+      : [
+          { text: 'BEHAVIOUR', header: true },
+          { text: 'Drifting across the map.', header: false },
+          { text: 'Click COLLECT to claim resources.', header: false },
+          { text: 'Despawns when it exits the map.', header: false },
+          { text: '', header: false },
+          { text: def.desc, header: false, wrap: true },
+        ];
+
+    let ly = 4;
+    lines.forEach(({ text, header, wrap }) => {
+      if (!text) { ly += 10; return; }
+      const w = this._bldScrollW - 16;
+      this.buildingScrollContainer.add(
+        this.add.text(0, ly, text, {
+          font: header ? 'bold 9px monospace' : '10px monospace',
+          color: header ? '#44aaff' : '#7a9aba',
+          wordWrap: wrap ? { width: w } : undefined,
+        })
+      );
+      ly += header ? 14 : (wrap ? 28 : 14);
+    });
+
+    // Meteor warning
+    if (asteroid.type === 'meteor') {
+      this.buildingScrollContainer.add(
+        this.add.text(0, ly + 4, '⚠  Cannot be stopped.', {
+          font: '10px monospace', color: '#774433',
+        })
+      );
+    }
+
+    // ── LEFT PANEL: asteroid visual + any miner currently attached ─────────
+    const x = 16, y = this.PANEL_Y + 30;
+    const PANEL_BOTTOM = this.PANEL_Y + this.PANEL_H - 8;
+
+    // Asteroid icon
+    const iconGfx = this.add.graphics();
+    iconGfx.fillStyle(def.glowColor, 0.25);
+    iconGfx.fillCircle(x + 16, y + 16, def.radius + 8);
+    iconGfx.fillStyle(def.color, 1);
+    iconGfx.fillCircle(x + 16, y + 16, def.radius + 2);
+    iconGfx.fillStyle(0xffffff, 0.2);
+    iconGfx.fillCircle(x + 13, y + 13, (def.radius + 2) * 0.35);
+    if (asteroid.type === 'meteor') {
+      for (let i = 1; i <= 4; i++) {
+        iconGfx.fillStyle(0xff6644, 0.35 - i * 0.07);
+        iconGfx.fillCircle(x + 16 + i * 4, y + 16 + i * 4, (def.radius + 2) * (1 - i * 0.18));
+      }
+    }
+    this.stackListContainer.add(iconGfx);
+    this.stackListContainer.add(this.add.text(x + 38, y + 4, def.label, {
+      font: 'bold 11px monospace', color: COLOR_MAP[asteroid.type] || '#aabbcc',
+    }));
+    this.stackListContainer.add(this.add.text(x + 38, y + 18, typeLabels[asteroid.type] || '', {
+      font: '9px monospace', color: '#334455',
+    }));
+
+    // Hide split controls — not applicable to asteroids
+    this.splitTotalText.setVisible(false);
+    this.btnSplitMove.setVisible(false);
+    this.splitHint.setVisible(false);
+
+    // ── Miners attached to this asteroid ─────────────────────────────────
+    const gs = this.scene.get('GameScene');
+    const attachedMiners = (gs?.asteroidManager?._miners || []).filter(
+      m => m._target === asteroid
+    );
+
+    const minerHeaderY = y + 40;
+    if (attachedMiners.length > 0) {
+      const divG = this.add.graphics();
+      divG.lineStyle(1, 0x1a3a3a, 0.8);
+      divG.lineBetween(x, minerHeaderY, this.MID_X - 16, minerHeaderY);
+      this.stackListContainer.add(divG);
+      this.stackListContainer.add(this.add.text(x, minerHeaderY + 4, 'MINING UNIT', {
+        font: 'bold 9px monospace', color: '#44ffdd',
+      }));
+
+      const STATE_LABELS = { idle: 'Idle', flying: 'En Route', mining: 'Mining', returning: 'Returning' };
+      attachedMiners.forEach((miner, i) => {
+        const my = minerHeaderY + 18 + i * 28;
+        if (my + 28 > PANEL_BOTTOM) return;
+
+        const mg = this.add.graphics();
+        const mx = x + 10, mcy = my + 10, s = 5;
+        mg.fillStyle(0x44ffdd, 1);
+        mg.fillTriangle(mx, mcy - s, mx + s, mcy, mx, mcy + s);
+        mg.fillTriangle(mx, mcy - s, mx - s, mcy, mx, mcy + s);
+        mg.fillStyle(0xffffff, 0.5);
+        mg.fillCircle(mx, mcy, 1.5);
+        this.stackListContainer.add(mg);
+
+        const stateStr = STATE_LABELS[miner.state] || miner.state;
+        this.stackListContainer.add(this.add.text(x + 20, my + 2, `${miner.homeNode.label} Miner`, {
+          font: 'bold 9px monospace', color: '#44ffdd',
+        }));
+        this.stackListContainer.add(this.add.text(x + 20, my + 14, stateStr, {
+          font: '9px monospace', color: '#44ffdd',
+        }));
+
+        // Progress bar
+
+      });
+    } else {
+      this.stackListContainer.add(this.add.text(x, minerHeaderY + 6, 'No mining unit attached.', {
+        font: '10px monospace', color: '#223344',
+      }));
+    }
+
+    // Compute scroll height from the content we just added, then enable scrollbar
+    // ly is the y cursor from the lines loop above — it represents total content height
+    this._scrollY = 0;
+    this.buildingScrollContainer.setPosition(this._bldScrollX, this._bldScrollY);
+    this._maxScrollY = Math.max(0, ly - this._bldScrollH + 40);
+    this._updateScrollbar(ly + 40);
+  }
   close() {
     if (!this.isOpen) return;
     this._closeModal();
     this.root.setVisible(false);
-    this.isOpen       = false;
-    this.activeNode   = null;
-    this.activeStacks = [];
+    this.isOpen          = false;
+    this.activeNode      = null;
+    this.activeStacks    = [];
+    this._activeAsteroid = null;
     this.splitValue   = 0;
     this.stackListContainer.removeAll(true);
     this.buildingScrollContainer.removeAll(true);
@@ -927,7 +1147,10 @@ export default class NodePanel extends Phaser.Scene {
   _refreshStackList() {
     this.stackListContainer.removeAll(true);
     this.stackSelectorContainer.removeAll(true);
-    const x = 16, y = this.PANEL_Y + 34;
+    const x = 16;
+    // Header "UNIT MANAGEMENT" is at PANEL_Y+14, so content starts at PANEL_Y+30
+    const y = this.PANEL_Y + 30;
+    const PANEL_BOTTOM = this.PANEL_Y + this.PANEL_H - 8;
 
     if (this.activeStacks.length === 0) {
       this.stackListContainer.add(this.add.text(x, y, 'No friendly units at this node', {
@@ -936,18 +1159,15 @@ export default class NodePanel extends Phaser.Scene {
       this.splitTotalText.setVisible(false);
       this.btnSplitMove.setVisible(false);
       this.splitHint.setVisible(false);
+      this._refreshMiners(y + 18, PANEL_BOTTOM);
       return;
     }
-
-    this.splitTotalText.setVisible(true);
-    this.btnSplitMove.setVisible(true);
-    this.splitHint.setVisible(true);
 
     // ── Stack selector tabs ───────────────────────────────────────────────
     this.activeStacks.forEach((stack, i) => {
       const tx = x + i * 66;
       const selected = (i === this._activeStackIdx);
-      const bg = this.add.rectangle(tx - 2, y - 2, 62, 16,
+      const bg = this.add.rectangle(tx - 2, y - 2, 62, 15,
         selected ? 0x0d2244 : 0x0a1020).setOrigin(0, 0).setInteractive({ useHandCursor: true });
       bg.on('pointerdown', () => {
         this._activeStackIdx = i;
@@ -960,7 +1180,7 @@ export default class NodePanel extends Phaser.Scene {
       ));
     });
 
-    // ── Composition rows for active stack ─────────────────────────────────
+    // ── Composition rows ──────────────────────────────────────────────────
     const stack = this.activeStacks[this._activeStackIdx || 0];
     const comp  = stack?.composition || {};
     const SHIP_LABELS = {
@@ -971,86 +1191,171 @@ export default class NodePanel extends Phaser.Scene {
       fighter:     { label: 'Fighter',     color: 0x44aaff },
     };
 
-    let rowY = y + 24;
-    const ROW_H = 30;
+    const ROW_H = 24; // compact rows
+    let rowY = y + 18;
     const types = SHIP_TYPES.filter(t => (comp[t] || 0) > 0);
 
     if (types.length === 0) {
       this.stackListContainer.add(this.add.text(x, rowY, 'Stack is empty', {
         font: '10px monospace', color: '#334466'
       }));
-      return;
+      rowY += ROW_H;
+    } else {
+      types.forEach(type => {
+        const count = comp[type] || 0;
+        const split = this._splitComp[type] || 0;
+        const info  = SHIP_LABELS[type];
+
+        // Row background
+        this.stackListContainer.add(
+          this.add.rectangle(x - 4, rowY - 1, this.MID_X - x - 8, ROW_H - 2, 0x0a1020).setOrigin(0, 0)
+        );
+
+        // Ship icon
+        const iconG = this.add.graphics();
+        drawShipIcon(iconG, type, x + 9, rowY + 10, info.color);
+        this.stackListContainer.add(iconG);
+
+        // Label + count — hoverable
+        const labelTxt = this.add.text(x + 22, rowY + 2, `${info.label}  ×${count}`, {
+          font: '10px monospace', color: '#aaccff'
+        }).setInteractive({ useHandCursor: true });
+        labelTxt.on('pointerover', () => {
+          labelTxt.setColor('#ffffff');
+          const ptr = this.input.activePointer;
+          this.game.events.emit('showTooltip', { key: type, x: ptr.x, y: ptr.y });
+        });
+        labelTxt.on('pointermove', () => {
+          const ptr = this.input.activePointer;
+          this.game.events.emit('showTooltip', { key: type, x: ptr.x, y: ptr.y });
+        });
+        labelTxt.on('pointerout', () => {
+          labelTxt.setColor('#aaccff');
+          this.game.events.emit('hideTooltip');
+        });
+        this.stackListContainer.add(labelTxt);
+
+        // Split controls — fixed-width layout so [ − ] 0 [ + ] stays evenly spaced
+        // Each button is exactly 22px wide; number cell is 20px centred between them
+        const BTN_W = 22, NUM_W = 20;
+        const ctrlRight = this.MID_X - 12;          // right edge of the group
+        const ctrlTotal = BTN_W + NUM_W + BTN_W;    // 64px total
+        const ctrlX     = ctrlRight - ctrlTotal;
+
+        const xMinus = ctrlX;
+        const xNum   = ctrlX + BTN_W;
+        const xPlus  = xNum + NUM_W;
+
+        const btnM = this._makeFixedButton(xMinus, rowY + 3, BTN_W, '−', () => {
+          this._splitComp[type] = Math.max(0, (this._splitComp[type] || 0) - 1);
+          this._refreshStackList();
+        });
+        this.stackListContainer.add(btnM);
+
+        // Number centred in the NUM_W cell
+        this.stackListContainer.add(
+          this.add.text(xNum + NUM_W / 2, rowY + 4, String(split), {
+            font: 'bold 10px monospace', color: split > 0 ? '#ffffff' : '#334466'
+          }).setOrigin(0.5, 0)
+        );
+
+        const btnP = this._makeFixedButton(xPlus, rowY + 3, BTN_W, '+', () => {
+          this._splitComp[type] = Math.min(count, (this._splitComp[type] || 0) + 1);
+          this._refreshStackList();
+        });
+        this.stackListContainer.add(btnP);
+
+        rowY += ROW_H;
+      });
     }
 
-    types.forEach(type => {
-      const count     = comp[type] || 0;
-      const split     = this._splitComp[type] || 0;
-      const info      = SHIP_LABELS[type];
+    // ── Split controls — immediately below last combat row ─────────────────
+    const splitY = rowY + 4;
+    const splitVisible = splitY + 50 < PANEL_BOTTOM;
+    this.splitTotalText.setVisible(splitVisible);
+    this.btnSplitMove.setVisible(splitVisible);
+    this.splitHint.setVisible(false); // always hide hint — saves space
+    if (splitVisible) {
+      this.splitTotalText.setPosition(x, splitY);
+      this.btnSplitMove.setPosition(x, splitY + 14);
+    }
+    this._refreshSplitDisplay();
 
-      // Row background
-      this.stackListContainer.add(
-        this.add.rectangle(x - 4, rowY - 2, this.MID_X - x - 8, ROW_H - 2, 0x0a1020).setOrigin(0, 0)
-      );
+    // ── Miners section — below split controls ──────────────────────────────
+    const minerY = splitVisible ? splitY + 36 : rowY + 4;
+    this._refreshMiners(minerY, PANEL_BOTTOM);
+  }
 
-      // Ship icon
-      const iconG = this.add.graphics();
-      drawShipIcon(iconG, type, x + 9, rowY + 12, info.color);
-      this.stackListContainer.add(iconG);
+  // Renders the ASTEROID MINERS sub-section into stackListContainer.
+  // startY and panelBottom are absolute screen coords.
+  _refreshMiners(startY, panelBottom) {
+    const gs     = this.scene.get('GameScene');
+    const nodeId = this._activeAsteroid
+      ? null  // asteroid view — miners shown separately in _refreshAsteroidMiners
+      : this.activeNode?.id;
+    const miners = nodeId ? (gs?.asteroidManager?.getMinersForNode(nodeId) || []) : [];
+    if (miners.length === 0) return;
+    if (startY + 22 > panelBottom) return;
 
-      // Ship type label — hoverable keyword
-      const labelTxt = this.add.text(x + 22, rowY + 4, info.label, {
-        font: '10px monospace', color: '#aaccff'
-      }).setInteractive({ useHandCursor: true });
-      labelTxt.on('pointerover', () => {
-        labelTxt.setColor('#ffffff');
+    // Divider
+    const divG = this.add.graphics();
+    divG.lineStyle(1, 0x1a3a3a, 0.8);
+    divG.lineBetween(16, startY, this.MID_X - 16, startY);
+    this.stackListContainer.add(divG);
+    this.stackListContainer.add(this.add.text(16, startY + 3, 'PLANET UNITS', {
+      font: 'bold 9px monospace', color: '#44ffdd',
+    }));
+
+    const STATE_LABELS = { idle: 'Idle', flying: 'En Route', mining: 'Mining', returning: 'Returning' };
+    const ROW = 26;
+
+    miners.forEach((miner, i) => {
+      const my = startY + 16 + i * ROW;
+      if (my + ROW > panelBottom) return;
+
+      // Diamond icon
+      const mg = this.add.graphics();
+      const mx = 26, mcy = my + 10, s = 5;
+      mg.fillStyle(0x44ffdd, 1);
+      mg.fillTriangle(mx, mcy - s, mx + s, mcy, mx, mcy + s);
+      mg.fillTriangle(mx, mcy - s, mx - s, mcy, mx, mcy + s);
+      mg.fillStyle(0xffffff, 0.5);
+      mg.fillCircle(mx, mcy, 1.5);
+      this.stackListContainer.add(mg);
+
+      const stateStr = STATE_LABELS[miner.state] || miner.state;
+      const stateCol = miner.state === 'mining'     ? '#44ffdd'
+                     : miner.state === 'returning'  ? '#ffdd44' : '#446688';
+
+      const minerLabel = this.add.text(36, my + 2, `Miner ${i + 1}`, {
+        font: 'bold 9px monospace', color: '#44ffdd',
+      }).setInteractive({ useHandCursor: false });
+      minerLabel.on('pointerover', () => {
         const ptr = this.input.activePointer;
-        this.game.events.emit('showTooltip', { key: type, x: ptr.x, y: ptr.y });
+        this.game.events.emit('showTooltip', { key: 'asteroid_miner', x: ptr.x, y: ptr.y });
       });
-      labelTxt.on('pointermove', () => {
+      minerLabel.on('pointermove', () => {
         const ptr = this.input.activePointer;
-        this.game.events.emit('showTooltip', { key: type, x: ptr.x, y: ptr.y });
+        this.game.events.emit('showTooltip', { key: 'asteroid_miner', x: ptr.x, y: ptr.y });
       });
-      labelTxt.on('pointerout', () => {
-        labelTxt.setColor('#aaccff');
+      minerLabel.on('pointerout', () => {
         this.game.events.emit('hideTooltip');
       });
-      this.stackListContainer.add(labelTxt);
-      this.stackListContainer.add(this.add.text(x + 22, rowY + 16, `${count} total`, {
-        font: '9px monospace', color: '#556688'
+      this.stackListContainer.add(minerLabel);
+      this.stackListContainer.add(this.add.text(90, my + 2, stateStr, {
+        font: '9px monospace', color: stateCol,
       }));
 
-      // Split controls: − [n] + — anchored well inside the left panel
-      const ctrlX  = this.MID_X - 120;
-      const BTN_W  = 22;
-      const GAP    = 4;
-      const NUM_W  = 24;
-      const xMinus = ctrlX;
-      const xNum   = ctrlX + BTN_W + GAP;
-      const xPlus  = xNum + NUM_W + GAP;
 
-      const btnM = this._makeButton(xMinus, rowY + 6, ' − ', () => {
-        this._splitComp[type] = Math.max(0, (this._splitComp[type] || 0) - 1);
-        this._refreshStackList();
-      }, 0x0d1a2e, '#4499cc');
-      this.stackListContainer.add(btnM);
 
-      const splitCountTxt = this.add.text(xNum + NUM_W / 2, rowY + 10, String(split), {
-        font: 'bold 11px monospace', color: split > 0 ? '#ffffff' : '#334466'
-      }).setOrigin(0.5, 0);
-      this.stackListContainer.add(splitCountTxt);
-
-      const btnP = this._makeButton(xPlus, rowY + 6, ' + ', () => {
-        // Flagship can always be split (moved independently) — max is its count in this stack
-        const maxSplit = count;
-        this._splitComp[type] = Math.min(maxSplit, (this._splitComp[type] || 0) + 1);
-        this._refreshStackList();
-      }, 0x0d1a2e, '#4499cc');
-      this.stackListContainer.add(btnP);
-
-      rowY += ROW_H;
+      // Cargo
+      const cargoTotal = (miner.cargo.food || 0) + (miner.cargo.metal || 0) + (miner.cargo.fuel || 0);
+      if (cargoTotal > 0 && miner.state !== 'mining') {
+        this.stackListContainer.add(this.add.text(this.MID_X - 70, my + 2, `⛏ ${cargoTotal}`, {
+          font: '9px monospace', color: '#ffdd44',
+        }));
+      }
     });
-
-    this._refreshSplitDisplay();
   }
 
   _refreshNodeInfo() {
@@ -1099,6 +1404,21 @@ export default class NodePanel extends Phaser.Scene {
   // ══════════════════════════════════════════════════════════════════════════
   // Helpers
   // ══════════════════════════════════════════════════════════════════════════
+
+  _makeFixedButton(x, y, w, glyph, onClick) {
+    const bg  = this.add.rectangle(0, 0, w, 18, 0x0d1a2e).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+    bg.on('pointerover',  () => bg.setFillStyle(0x112233));
+    bg.on('pointerout',   () => bg.setFillStyle(0x0d1a2e));
+    bg.on('pointerdown',  onClick);
+    // Border
+    const border = this.add.graphics();
+    border.lineStyle(1, 0x224466, 0.8);
+    border.strokeRect(0, 0, w, 18);
+    const txt = this.add.text(w / 2, 9, glyph, {
+      font: 'bold 11px monospace', color: '#4499cc'
+    }).setOrigin(0.5, 0.5);
+    return this.add.container(x, y, [bg, border, txt]);
+  }
 
   _makeButton(x, y, label, onClick, bgColor = 0x0d1a2e, textColor = '#4499cc') {
     const txt = this.add.text(0, 0, label, { font: '11px monospace', color: textColor });
