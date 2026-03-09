@@ -78,6 +78,45 @@ export default class UIScene extends Phaser.Scene {
       }
     });
 
+    // ── Research button — anchored to end just before the first resource slot ──
+    // Units slot left edge = width - RIGHT_PAD - (numSlots-1)*SLOT_W - SLOT_W + 10
+    //                      = width - 20 - 3*140 - 140 + 10 = width - 570
+    // Button right edge sits 12px to the left of that.
+    this._researchOpen = false;
+    this._researchRP   = 0;
+    this._researchBtnG = this.add.graphics();
+
+    // Compute button geometry once; reused in _drawResearchBtn
+    const BTN_W  = 160, BTN_GAP = 12;
+    const BTN_RIGHT = width - RIGHT_PAD - resDefs.length * SLOT_W - BTN_GAP;
+    const BTN_LEFT  = BTN_RIGHT - BTN_W;
+    this._btnRight = BTN_RIGHT;
+    this._btnLeft  = BTN_LEFT;
+    this._btnW     = BTN_W;
+
+    this._drawResearchBtn(false);
+
+    const resZone = this.add.rectangle(
+      BTN_LEFT, TOP_BAR_H / 2, BTN_W, 30, 0xffffff, 0
+    ).setOrigin(0, 0.5).setInteractive({ useHandCursor: true });
+    resZone.on('pointerover',  () => { if (!this._researchOpen) this._drawResearchBtn(true); });
+    resZone.on('pointerout',   () => { this._drawResearchBtn(this._researchOpen); });
+    resZone.on('pointerdown',  () => {
+      this._researchOpen = !this._researchOpen;
+      this._drawResearchBtn(this._researchOpen);
+      this.game.events.emit(this._researchOpen ? 'openResearch' : 'closeResearch');
+    });
+
+    this.game.events.on('researchAddRP', (amt) => {
+      this._researchRP += amt;
+      this._drawResearchBtn(this._researchOpen);
+    });
+
+    this.game.events.on('researchClosed', () => {
+      this._researchOpen = false;
+      this._drawResearchBtn(false);
+    });
+
     // ── Bottom bar ─────────────────────────────────────────────────────────
     this.add.rectangle(0, height - 80, width, 80, 0x080c14, 0.97).setOrigin(0, 0);
     this.add.rectangle(0, height - 82, width, 2, 0x2255aa, 0.8).setOrigin(0, 0);
@@ -109,6 +148,72 @@ export default class UIScene extends Phaser.Scene {
 
     // ── Tooltip (built once, shown/hidden on hover) ────────────────────────
     this._buildTooltip();
+  }
+
+  _drawResearchBtn(active) {
+    const g   = this._researchBtnG;
+    const cy  = 20;
+    const BL  = this._btnLeft;
+    const BW  = this._btnW;
+    const BR  = this._btnRight;
+    if (BL === undefined) return;   // called before create() finishes
+    g.clear();
+
+    // Background
+    if (active) {
+      g.fillStyle(0x0d2a50, 1);
+      g.fillRoundedRect(BL, cy - 15, BW, 30, 4);
+      g.lineStyle(1, 0x44aaff, 0.9);
+      g.strokeRoundedRect(BL, cy - 15, BW, 30, 4);
+    } else {
+      g.fillStyle(0x0a1828, 1);
+      g.fillRoundedRect(BL, cy - 15, BW, 30, 4);
+      g.lineStyle(1, 0x1a3a5c, 0.8);
+      g.strokeRoundedRect(BL, cy - 15, BW, 30, 4);
+    }
+
+    // Atom icon — left-side, same x as resource icons
+    const col = active ? 0x88ddff : 0x4488aa;
+    const ax  = BL + 14;
+    g.lineStyle(1, col, active ? 0.9 : 0.6);
+    g.fillStyle(col, 1);
+    g.fillCircle(ax, cy, 2);
+    g.strokeEllipse(ax, cy, 14, 5);
+    const drawEllRot = (ox, oy, rw, rh, angle) => {
+      const pts = [];
+      for (let s = 0; s <= 32; s++) {
+        const t = (s / 32) * Math.PI * 2;
+        const ex = Math.cos(t) * rw, ey = Math.sin(t) * rh;
+        pts.push({ x: ox + ex * Math.cos(angle) - ey * Math.sin(angle),
+                   y: oy + ex * Math.sin(angle) + ey * Math.cos(angle) });
+      }
+      g.strokePoints(pts, true);
+    };
+    drawEllRot(ax, cy, 7, 2.5,  Math.PI / 3);
+    drawEllRot(ax, cy, 7, 2.5, -Math.PI / 3);
+
+    // "RESEARCH" label — same style as resource labels
+    const lblX = ax + 14;
+    if (!this._researchLbl) {
+      this._researchLbl = this.add.text(lblX, cy, 'RESEARCH', {
+        font: '11px monospace', color: '#4a6688',
+      }).setOrigin(0, 0.5).setDepth(5);
+    } else {
+      this._researchLbl.setPosition(lblX, cy);
+    }
+
+    // RP value — right-aligned, same style as resource values
+    const rpX = BR - 8;
+    if (!this._researchRPText) {
+      this._researchRPText = this.add.text(rpX, cy, String(this._researchRP ?? 0), {
+        font: 'bold 13px monospace', color: '#44aaff',
+      }).setOrigin(1, 0.5).setDepth(5);
+    } else {
+      this._researchRPText.setPosition(rpX, cy).setText(String(this._researchRP ?? 0));
+    }
+
+    this._researchLbl.setColor(active ? '#7799cc' : '#4a6688');
+    this._researchRPText.setColor(active ? '#88ddff' : '#44aaff');
   }
 
   _drawMetalIcon(cx, cy, hexColor) {

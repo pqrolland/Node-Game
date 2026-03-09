@@ -23,7 +23,7 @@ const ASTEROID_DEFS = {
     label:     'Asteroid',
     color:     0x889999,
     glowColor: 0xaabbcc,
-    radius:    7,
+    radius:    5,
     speed:     60,          // px / sec
     resources: 100,
     desc:      'A drifting asteroid carrying resources. Click to collect when it passes near your territory.',
@@ -32,7 +32,7 @@ const ASTEROID_DEFS = {
     label:     'Rich Asteroid',
     color:     0xddaa22,
     glowColor: 0xffee88,
-    radius:    9,
+    radius:    6,
     speed:     60,
     resources: 300,
     desc:      'A mineral-dense asteroid worth three times the normal yield. Rare — act fast.',
@@ -41,7 +41,7 @@ const ASTEROID_DEFS = {
     label:     'Meteor',
     color:     0xdd3322,
     glowColor: 0xff8866,
-    radius:    8,
+    radius:    6,
     speed:     60,
     resources: 100,
     desc:      'A destructive meteor locked onto a planet. On impact it has a 30% chance to destroy each unit present. Cruisers retain their 50% repair chance.',
@@ -212,39 +212,33 @@ export default class AsteroidManager {
     const def = a.def;
 
     // Glow pulse (subtle)
-    const pulse = 0.18 + 0.08 * Math.sin(Date.now() / 400 + a.x);
+    const pulse = 0.14 + 0.06 * Math.sin(Date.now() / 400 + a.x);
     g.fillStyle(def.glowColor, pulse);
-    g.fillCircle(a.x, a.y, def.radius + 5);
+    g.fillCircle(a.x, a.y, def.radius + 4);
 
-    // Core body
-    g.fillStyle(def.color, 1);
-    g.fillCircle(a.x, a.y, def.radius);
+    // Hollow ring body — stroke only, no fill
+    g.lineStyle(1.5, def.color, 1);
+    g.strokeCircle(a.x, a.y, def.radius);
 
-    // Crater-like highlight
-    g.fillStyle(0xffffff, 0.18);
-    g.fillCircle(a.x - def.radius * 0.28, a.y - def.radius * 0.28, def.radius * 0.38);
+    // Small bright dot at centre to distinguish from planets
+    g.fillStyle(def.color, 0.7);
+    g.fillCircle(a.x, a.y, 1.5);
 
     // Hover ring
     if (a._hovered) {
       g.lineStyle(1.5, def.glowColor, 0.9);
-      g.strokeCircle(a.x, a.y, def.radius + 7);
-
-      // Label above
-      // (drawn as a very simple technique — we use a transient text, but to keep
-      //  it framerate-safe we only create it when hovered state changes. Instead
-      //  draw a name tag using lines & pixels isn't practical, so we emit a
-      //  lightweight event and let UIScene render a floating label.)
+      g.strokeCircle(a.x, a.y, def.radius + 5);
     }
 
-    // Meteor: draw a tail
+    // Meteor: draw a tail of hollow rings fading out behind it
     if (a.type === 'meteor') {
       const speed = Math.sqrt(a.vx * a.vx + a.vy * a.vy) || 1;
       const nx = -a.vx / speed;
       const ny = -a.vy / speed;
-      for (let i = 1; i <= 5; i++) {
-        const alpha = 0.35 - i * 0.06;
-        g.fillStyle(0xff6644, alpha);
-        g.fillCircle(a.x + nx * i * 5, a.y + ny * i * 5, def.radius * (1 - i * 0.15));
+      for (let i = 1; i <= 4; i++) {
+        const alpha = 0.28 - i * 0.06;
+        g.lineStyle(1, 0xff6644, alpha);
+        g.strokeCircle(a.x + nx * i * 4, a.y + ny * i * 4, def.radius * (1 - i * 0.18));
       }
     }
   }

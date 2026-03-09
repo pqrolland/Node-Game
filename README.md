@@ -16,7 +16,7 @@ NodeGame/
 │   ├── style.css
 │   ├── scenes/
 │   │   ├── BootScene.js      # Asset preloader → routes to MainMenuScene
-│   │   ├── MainMenuScene.js  # Main menu — player count selector, start game
+│   │   ├── MainMenuScene.js  # Main menu — player count selector, How to Play, start game
 │   │   ├── GameScene.js      # Game loop, map, input, combat, ownership, resources, production
 │   │   ├── UIScene.js        # Top/bottom HUD, resource tooltips, game-over overlay
 │   │   ├── NodePanel.js      # Node Panel — unit management, planet info, buildings, asteroid info
@@ -236,6 +236,47 @@ When an **asteroid** is clicked instead of a planet:
 
 ### Tooltip Cards *(hover any highlighted unit name)*
 Each tooltip shows the unit's icon, role, stats, any special rules, and a description. Available for all ship types and the Asteroid Miner in every location where they are referenced — unit lists, build modal, and planet panels. Tooltips auto-anchor below the cursor and clamp to screen edges.
+
+---
+
+## 🗺 Roadmap & Design Intent
+
+### Phase A — Depth (current focus)
+Make each playthrough strategically distinct before adding players.
+
+| Feature | Status | Notes |
+|---|---|---|
+| Research Tree | Planned | Unlocks ship upgrades and building tiers. Core replayability driver. |
+| Ship Upgrades | Planned | Pairs with Research. Makes your fleet composition unique each game. |
+| Building Upgrades + Planetary Power | Planned | Energy capacity per planet forces meaningful build decisions. |
+| Missile Carriers | Planned | Ranged unit using the existing projectile system. New combat dimension. |
+| Planetary Defense | Planned | Building with intercept radius. Counters missile carriers and meteors. |
+| Win Condition | Planned | Destroy all enemy flagships or capture a threshold of planets. |
+| Lightweight AI | Planned | Expand-nearest + attack-weakest. Enough to test solo. Deepen post-multiplayer. |
+
+### Phase B — Close the Loop
+Make the game playable end-to-end.
+
+| Feature | Status | Notes |
+|---|---|---|
+| Hotseat Multiplayer | Planned | Shared browser, turn indicator. No networking needed. Enables asymmetric testing. |
+| Sound Effects | Planned | Combat, production, capture, meteor impact. |
+| Basic AI | Planned | Revisit with full feature set. |
+
+### Phase C — Go Wide
+Networking and advanced mechanics.
+
+| Feature | Status | Notes |
+|---|---|---|
+| Networked Multiplayer | Planned | WebSocket server, authoritative state. Supabase or Colyseus backend. |
+| Stealth + Visibility | Planned | Fog of war, cloaking units. Requires multiplayer to be meaningful. |
+| Full AI | Planned | Needs complete feature set to be worth investing in deeply. |
+
+### Design Notes
+- **Multiplayer timing:** Every system built as local GameScene state will need rearchitecting when a server becomes the authority. Keep state well-separated now. Hotseat first, then network.
+- **Tooltip contract:** Every time a new unit type is added, tooltips must be wired in all three locations — unit list (Planet Units section), Build Modal card, and any panel where the unit is referenced by name.
+- **Projectile architecture:** `AsteroidManager` is the template for any free-moving object. Missiles will follow the same pattern: spawn on edge event, move each `update()`, check arrival/intercept, fire event on resolution.
+- **Power system intent:** Planetary power should be a hard cap, not a soft penalty. A planet with 4 power slots forces a real choice between offense (factory), defense (planetary defense), economy (extractor), and utility (miner). Upgrades cost power to run, not just to build.
 
 ## 🌐 Deployment
 

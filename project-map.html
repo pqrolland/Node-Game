@@ -10,6 +10,8 @@
     --blue: #44aaff;
     --blue-dim: #1a3a5c;
     --red: #ff4455;
+    --orange: #ff8844;
+    --cyan: #44ffdd;
     --bg: #080c14;
     --panel: #0d1422;
     --border: #1a2a44;
@@ -31,71 +33,33 @@
     background-size: 40px 40px;
   }
 
-  h1 {
-    font-family: 'Orbitron', monospace;
-    color: var(--blue);
-    font-size: 1.6rem;
-    letter-spacing: 4px;
-    text-align: center;
-    margin-bottom: 8px;
-    text-shadow: 0 0 20px var(--blue);
-  }
-  .subtitle {
-    text-align: center;
-    color: var(--muted);
-    font-size: 0.8rem;
-    margin-bottom: 40px;
-    letter-spacing: 2px;
-  }
+  h1 { font-family: 'Orbitron', monospace; color: var(--blue); font-size: 1.6rem; letter-spacing: 4px; text-align: center; margin-bottom: 8px; text-shadow: 0 0 20px var(--blue); }
+  .subtitle { text-align: center; color: var(--muted); font-size: 0.8rem; margin-bottom: 40px; letter-spacing: 2px; }
 
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 20px;
-    max-width: 1200px;
-    margin: 0 auto 40px;
-  }
+  .section-label { font-family: 'Orbitron', monospace; font-size: 0.65rem; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; max-width: 1200px; margin: 0 auto 10px; padding-left: 2px; }
 
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 20px;
-    cursor: pointer;
-    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
-    position: relative;
-    overflow: hidden;
-  }
-  .card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0;
-    width: 3px; height: 100%;
-    background: var(--blue-dim);
-    transition: background 0.2s;
-  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; max-width: 1200px; margin: 0 auto 40px; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 20px; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s; position: relative; overflow: hidden; }
+  .card::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; background: var(--blue-dim); transition: background 0.2s; }
   .card:hover { border-color: var(--blue); box-shadow: 0 0 20px rgba(68,170,255,0.12); transform: translateY(-2px); }
   .card:hover::before { background: var(--blue); }
   .card.active { border-color: var(--blue); box-shadow: 0 0 28px rgba(68,170,255,0.2); }
   .card.active::before { background: var(--blue); }
+  .card.cyan::before { background: #1a5c4a; }
+  .card.cyan:hover { border-color: var(--cyan); box-shadow: 0 0 20px rgba(68,255,221,0.12); }
+  .card.cyan:hover::before, .card.cyan.active::before { background: var(--cyan); }
+  .card.cyan.active { border-color: var(--cyan); }
 
   .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
   .icon { font-size: 1.4rem; }
   .card-title { font-family: 'Orbitron', monospace; font-size: 0.75rem; color: var(--blue); letter-spacing: 2px; text-transform: uppercase; }
+  .card.cyan .card-title { color: var(--cyan); }
   .card-file { font-size: 0.72rem; color: var(--muted); margin-bottom: 10px; padding: 4px 8px; background: rgba(68,170,255,0.04); border-radius: 2px; border-left: 2px solid var(--blue-dim); }
   .card-lines { font-size: 0.65rem; color: #2a4a6a; margin-bottom: 8px; }
   .card-desc { font-size: 0.75rem; color: #7a9aba; line-height: 1.6; }
 
-  .detail {
-    max-width: 1200px;
-    margin: 0 auto 40px;
-    background: var(--panel);
-    border: 1px solid var(--blue);
-    border-radius: 4px;
-    padding: 24px;
-    display: none;
-    animation: fadeIn 0.2s ease;
-  }
+  .detail { max-width: 1200px; margin: 0 auto 40px; background: var(--panel); border: 1px solid var(--blue); border-radius: 4px; padding: 24px; display: none; animation: fadeIn 0.2s ease; }
   .detail.show { display: block; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   .detail-title { font-family: 'Orbitron', monospace; color: var(--blue); font-size: 0.9rem; letter-spacing: 3px; margin-bottom: 16px; }
@@ -103,22 +67,17 @@
   .detail-section h3 { font-size: 0.7rem; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
   .tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
   .tag { padding: 3px 10px; border-radius: 2px; font-size: 0.7rem; border: 1px solid; }
-  .tag.blue   { color: var(--blue); border-color: var(--blue-dim); background: rgba(68,170,255,0.06); }
-  .tag.red    { color: var(--red);  border-color: #5c1a1a;         background: rgba(255,68,85,0.06); }
-  .tag.yellow { color: #ffcc44;     border-color: #5c4a00;         background: rgba(255,204,68,0.06); }
-  .tag.green  { color: #44ff88;     border-color: #1a5c35;         background: rgba(68,255,136,0.06); }
+  .tag.blue   { color: var(--blue);  border-color: var(--blue-dim);  background: rgba(68,170,255,0.06); }
+  .tag.red    { color: var(--red);   border-color: #5c1a1a;          background: rgba(255,68,85,0.06); }
+  .tag.yellow { color: #ffcc44;      border-color: #5c4a00;          background: rgba(255,204,68,0.06); }
+  .tag.green  { color: #44ff88;      border-color: #1a5c35;          background: rgba(68,255,136,0.06); }
+  .tag.cyan   { color: var(--cyan);  border-color: #1a5c4a;          background: rgba(68,255,221,0.06); }
+  .tag.orange { color: var(--orange);border-color: #5c2a00;          background: rgba(255,136,68,0.06); }
   .step-list { list-style: none; }
   .step-list li { padding: 6px 0; font-size: 0.75rem; color: #7a9aba; border-bottom: 1px solid var(--border); display: flex; gap: 10px; }
   .step-list li span.num { color: var(--blue); min-width: 20px; }
 
-  .pipeline {
-    max-width: 1200px;
-    margin: 0 auto 40px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 24px;
-  }
+  .pipeline { max-width: 1200px; margin: 0 auto 40px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 24px; }
   .pipeline-title { font-family: 'Orbitron', monospace; color: var(--blue); font-size: 0.75rem; letter-spacing: 3px; margin-bottom: 20px; text-align: center; }
   .pipeline-flow { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0; }
   .pipe-step { text-align: center; padding: 14px 20px; background: rgba(68,170,255,0.04); border: 1px solid var(--blue-dim); border-radius: 3px; min-width: 120px; }
@@ -127,13 +86,27 @@
   .pipe-step .p-sub  { font-size: 0.6rem; color: var(--muted); margin-top: 3px; }
   .pipe-arrow { color: var(--blue-dim); font-size: 1.4rem; padding: 0 6px; flex-shrink: 0; }
 
-  .next-steps { max-width: 1200px; margin: 0 auto; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 24px; }
-  .next-steps h2 { font-family: 'Orbitron', monospace; color: var(--blue); font-size: 0.75rem; letter-spacing: 3px; margin-bottom: 16px; }
-  .step-checklist { list-style: none; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-  .step-checklist li { font-size: 0.73rem; color: #7a9aba; padding: 10px 12px; background: rgba(68,170,255,0.03); border: 1px solid var(--border); border-radius: 3px; display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
-  .step-checklist li .check { color: var(--blue-dim); flex-shrink: 0; }
-  .step-checklist li b { color: var(--text); display: block; margin-bottom: 2px; }
-  .done b { text-decoration: line-through; opacity: 0.5; }
+  .roadmap { max-width: 1200px; margin: 0 auto 40px; }
+  .roadmap-phase { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 20px; margin-bottom: 16px; }
+  .roadmap-phase h2 { font-family: 'Orbitron', monospace; font-size: 0.7rem; letter-spacing: 3px; margin-bottom: 14px; }
+  .phase-a h2 { color: var(--blue); }
+  .phase-b h2 { color: #ffcc44; }
+  .phase-c h2 { color: var(--muted); }
+  .roadmap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .roadmap-item { padding: 10px 12px; border-radius: 3px; border: 1px solid var(--border); font-size: 0.72rem; display: flex; gap: 8px; align-items: flex-start; cursor: pointer; transition: border-color 0.15s; }
+  .roadmap-item:hover { border-color: var(--blue); }
+  .roadmap-item .ri-check { flex-shrink: 0; font-size: 0.9rem; }
+  .roadmap-item b { color: var(--text); display: block; margin-bottom: 3px; font-size: 0.73rem; }
+  .roadmap-item span { color: #556688; font-size: 0.68rem; line-height: 1.4; }
+  .roadmap-item.done b { text-decoration: line-through; opacity: 0.45; }
+  .roadmap-item.done span { opacity: 0.35; }
+
+  .design-notes { max-width: 1200px; margin: 0 auto 40px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 24px; }
+  .design-notes h2 { font-family: 'Orbitron', monospace; color: var(--orange); font-size: 0.7rem; letter-spacing: 3px; margin-bottom: 16px; }
+  .note-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .note-item { padding: 12px; background: rgba(255,136,68,0.03); border: 1px solid #2a1a0a; border-radius: 3px; }
+  .note-item h3 { font-size: 0.68rem; color: var(--orange); letter-spacing: 1px; margin-bottom: 8px; }
+  .note-item p { font-size: 0.72rem; color: #7a9aba; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -141,8 +114,13 @@
 <h1>🚀 NODE GAME</h1>
 <p class="subtitle">SPACE RTS · PHASER 3 · CLICK ANY MODULE TO EXPLORE</p>
 
+<div class="section-label">▸ Core Modules</div>
 <div class="grid" id="cards"></div>
 <div class="detail" id="detail"></div>
+
+<div class="section-label">▸ Asteroid System</div>
+<div class="grid" id="asteroid-cards"></div>
+<div class="detail" id="asteroid-detail"></div>
 
 <div class="pipeline">
   <div class="pipeline-title">▶ CI/CD PIPELINE — PUSH TO DEPLOY</div>
@@ -161,246 +139,292 @@
   </div>
 </div>
 
-<div class="next-steps">
-  <h2>⬡ ROADMAP</h2>
-  <ul class="step-checklist" id="steps"></ul>
+<div class="roadmap">
+  <div class="roadmap-phase phase-a">
+    <h2>▸ PHASE A — DEPTH (CURRENT)</h2>
+    <div class="roadmap-grid" id="phase-a"></div>
+  </div>
+  <div class="roadmap-phase phase-b">
+    <h2>▸ PHASE B — CLOSE THE LOOP</h2>
+    <div class="roadmap-grid" id="phase-b"></div>
+  </div>
+  <div class="roadmap-phase phase-c">
+    <h2>▸ PHASE C — GO WIDE</h2>
+    <div class="roadmap-grid" id="phase-c"></div>
+  </div>
+</div>
+
+<div class="design-notes">
+  <h2>⬡ DESIGN NOTES & ARCHITECTURAL INTENT</h2>
+  <div class="note-grid">
+    <div class="note-item">
+      <h3>Multiplayer Timing</h3>
+      <p>Every system built as local GameScene state will need rearchitecting when a server becomes the authority. Keep state well-separated now. Hotseat first (shared browser, no networking), then WebSocket server. Don't let networking block feature depth — a boring game with multiplayer is still boring.</p>
+    </div>
+    <div class="note-item">
+      <h3>Tooltip Contract</h3>
+      <p>Every time a new unit type is added, tooltips must be wired in all locations: the Planet Units section of NodePanel, the Build Modal card, and any panel where the unit is referenced by name. This is a standing rule, not a one-off task.</p>
+    </div>
+    <div class="note-item">
+      <h3>Projectile Architecture</h3>
+      <p>AsteroidManager is the template for any free-moving object. Missiles follow the same pattern: spawn on event, move each update(), check arrival/intercept, fire resolution event. Planetary Defense buildings are radius checks run in the same update loop.</p>
+    </div>
+    <div class="note-item">
+      <h3>Planetary Power Intent</h3>
+      <p>Power should be a hard cap, not a soft penalty. A planet with 4 power slots forces a real choice: offense (factory), defense (planetary defense), economy (extractor), utility (miner). Upgrades cost power to run — not just to build. This is the core tension of the building system.</p>
+    </div>
+    <div class="note-item">
+      <h3>Research & Replayability</h3>
+      <p>Research is the primary replayability driver. Each game, players follow different tech paths — making their fleet and economy composition unique. Research should gate building upgrade tiers as well as ship stat improvements, so the tech tree has both military and economic branches.</p>
+    </div>
+    <div class="note-item">
+      <h3>AI Strategy</h3>
+      <p>Implement a lightweight AI (expand-nearest, attack-weakest) now to seal the game loop for solo testing. Do not over-invest in AI before the feature set is stable — every new system (research, missiles, power) changes optimal AI behaviour. Deep AI is a Phase C problem.</p>
+    </div>
+  </div>
 </div>
 
 <script>
 const modules = [
   {
-    icon: '🎮',
-    title: 'Game Scene',
-    file: 'src/scenes/GameScene.js',
-    lines: 662,
-    desc: 'Core game loop: map rendering, input, combat, ownership, resources, unit production, flagship defeat.',
-    tags: ['Combat', 'Ownership', 'Resources', 'Unit Production', 'Flagship'],
-    tagTypes: ['blue','blue','blue','blue','yellow'],
+    icon: '🎮', title: 'Game Scene', file: 'src/scenes/GameScene.js', cyan: false,
+    desc: 'Core game loop: map rendering, input, combat, ownership, resources, unit production, flagship defeat, asteroid manager.',
+    tags: ['Combat', 'Ownership', 'Resources', 'Production', 'Asteroids'],
+    tagTypes: ['blue','blue','blue','blue','cyan'],
     steps: [
-      'Procedural spiral map with 14 planet nodes',
-      'WASD/arrow camera scroll + scroll-wheel zoom',
-      'Click to select stacks, preview + issue move orders',
-      'handleArrival: merge friendly stacks or trigger combat',
-      'resolveCombat: destroyer pre-strike → standard combat',
-      '_handleStackDestroyed: flagship loss triggers game over',
-      '_tickResources: food/metal/fuel collected every 3 seconds',
-      '_tickUnitProduction: per-building timers spawn ships into stacks',
-      'handleBuildingAdded: applies resource bonuses + starts production timers',
-      'spawnStack: accepts optional composition object for ship types',
+      'Procedural spiral map scaled by player count (10 + n×10 nodes)',
+      'BFS pathfinding — stacks move along graph edges in real-time',
+      '3-phase combat: destroyer pre-strike → simultaneous attack → cruiser repair',
+      'Dreadnaught counts as 4 attack + 4 health; flagship = instant defeat on loss',
+      'nodeOwnership Map tracks team per node; drawOwnershipRings() redraws each change',
+      'Resource tick every 3s — sums food/metal/fuel from all player-owned nodes',
+      'Unit production timers per node:bldId key — ticks in _tickUnitProduction()',
+      'AsteroidManager owned here — update(delta) called each frame',
+      '_dead flag pattern prevents ghost update() calls on destroyed units',
     ],
-    note: 'unitProduction Map is keyed by "nodeId:buildingId" — supports multiple factories per planet.'
+    note: 'handleBuildingAdded() is the single point where building effects are applied: bonuses, production timers, and miner spawning.'
   },
   {
-    icon: '🖥',
-    title: 'UI Scene',
-    file: 'src/scenes/UIScene.js',
-    lines: 419,
-    desc: 'HUD overlay running in parallel with GameScene. Top bar, bottom bar, tooltips, game-over screen.',
-    tags: ['HUD', 'Pie Chart', 'Resource Tooltip', 'Game Over'],
-    tagTypes: ['blue','blue','blue','red'],
+    icon: '🖥', title: 'UI Scene', file: 'src/scenes/UIScene.js', cyan: false,
+    desc: 'Top HUD bar (resources, planet count, pie chart) and bottom bar (stack info, controls, event log). Runs in parallel with GameScene.',
+    tags: ['HUD', 'Resource Display', 'Event Log', 'Pie Chart'],
+    tagTypes: ['blue','blue','yellow','blue'],
     steps: [
-      'Top-left: live pie chart of owned planet types + player name + count',
-      'Top-right: unit count + food/metal/fuel icons and values',
-      'Hover resource slot: scrollable per-planet breakdown tooltip',
-      'Bottom-left: selected stack info (type + count)',
-      'Bottom-right: event log (last 3 events, fading alpha)',
-      'showGameOver(): full-screen defeat overlay',
-      'updateResources() accepts breakdown array for tooltip data',
+      'Top bar: pie chart of planet types owned, player name, planet count',
+      'Top bar right: unit count, food, metal, fuel — updated via updateHUD()',
+      'Hover resource icon → scrollable per-planet breakdown tooltip',
+      'Bottom bar: selected stack info (left), control hints (centre), event log (right)',
+      'Event log: last 3 events — arrivals, combat, merges, mining, intercepts',
+      'logEvent(text) called from GameScene, AsteroidManager, AsteroidMiner',
+      'Game-over overlay: triggered on flagship loss event from GameScene',
     ],
-    note: 'Tooltip stays open when cursor moves from slot into tooltip area (10px buffer guard in update).'
+    note: 'UIScene reads resources from its own .resources ref which GameScene keeps in sync via updateHUD().'
   },
   {
-    icon: '📋',
-    title: 'Node Panel',
-    file: 'src/scenes/NodePanel.js',
-    lines: 1062,
-    desc: 'Bottom panel (300px). Left: unit management with per-type split controls. Right: planet info + scrollable building cards.',
-    tags: ['Unit Management', 'Buildings', 'Build Modal', 'Construction'],
-    tagTypes: ['blue','blue','blue','yellow'],
+    icon: '📋', title: 'Node Panel', file: 'src/scenes/NodePanel.js', cyan: false,
+    desc: 'Bottom panel — unit management (left) and planet info + buildings (right). Also handles asteroid and miner info views.',
+    tags: ['Unit Management', 'Buildings', 'Asteroid View', 'Tooltips', 'Split'],
+    tagTypes: ['blue','blue','cyan','yellow','blue'],
     steps: [
-      'Left — stack selector tabs + per-ship-type composition rows',
-      '− n + controls per ship type; running split total + SPLIT & MOVE',
-      '_doSplit emits splitComp object; GameScene deducts exact ship types',
-      'Right — planet name, type label, resource bars with (+N) bonus annotations',
-      'Building cards: scrollable, 5 per row, geometry-masked, scrollbar thumb',
-      '_makeCard: constructs card with icon, name, output, zone; arc for factories',
-      '_reattachOverlays: recreates construction overlays after every scroll rebuild',
-      'Build Modal: 7 options in 2-row grid, costs red if unaffordable, already-built greyed out',
-      'Factory cards show circular progress arc (top-right) animated by GameScene tick',
-      'nodeResourcesUpdated event refreshes bars live when building completes',
+      'Left panel: stack selector tabs, per-ship rows with − n + split controls (fixed-width buttons)',
+      'Planet Units section below combat rows — lists Asteroid Miners with state + hover tooltip',
+      'Right panel: nodeName/nodeType/resBars are static objects repopulated on each open()',
+      'buildingScrollContainer: masked scrollable area for building cards (5 per row)',
+      'Build Modal: 8 options in 2-row grid, ttZone overlay fires tooltips on factory/miner cards',
+      'openAsteroid(): repopulates right panel with asteroid yield bars; left shows Mining Unit section',
+      'asteroidMinerStateChanged event triggers live refresh of asteroid panel when miner attaches',
+      '_refreshMiners(startY, panelBottom): draws Planet Units section with panel-bounds clipping',
+      '_makeFixedButton(): fixed 22px-wide buttons ensure − n + stays evenly spaced',
     ],
-    note: 'BUILDING_DEFS contains all 7 building definitions including drawIcon(), cost, produces, produceDuration.'
+    note: 'BUILDING_DEFS and PRODUCES_SHIP map are the two places to update when adding new buildings or unit types.'
   },
   {
-    icon: '🚀',
-    title: 'Unit Class',
-    file: 'src/units/Unit.js',
-    lines: 203,
+    icon: '💬', title: 'Tooltip Scene', file: 'src/scenes/TooltipScene.js', cyan: false,
+    desc: 'Always-on-top scene (depth 200). Renders stat cards for ship types and the Asteroid Miner on hover.',
+    tags: ['Tooltips', 'Stat Cards', 'Custom Icons'],
+    tagTypes: ['blue','blue','cyan'],
+    steps: [
+      'Listens for showTooltip { key, x, y } and hideTooltip on game.events',
+      'TOOLTIP_DEFS: fighter, destroyer, cruiser, dreadnaught, flagship, asteroid_miner',
+      'drawCustomIcon() path: asteroid_miner uses its own diamond draw fn instead of drawShipIcon',
+      'Dynamic height based on stat count + description word-wrap',
+      'Auto-clamps to screen edges — never overflows canvas',
+      'Left accent bar colour matches the unit colour for quick visual ID',
+    ],
+    note: 'To add a new unit tooltip: add entry to TOOLTIP_DEFS. Add drawCustomIcon() fn if the unit is not a standard ship type.'
+  },
+  {
+    icon: '🚀', title: 'Unit Class', file: 'src/units/Unit.js', cyan: false,
     desc: 'Stack container with ship composition. Badge shows dominant ship icon + total count. Exports ship icon draw functions.',
-    tags: ['Composition', 'Ship Icons', 'Badge', 'Movement'],
-    tagTypes: ['blue','blue','blue','yellow'],
+    tags: ['Composition', 'Ship Icons', 'Badge', 'Movement', '_dead flag'],
+    tagTypes: ['blue','blue','blue','yellow','red'],
     steps: [
       'composition: { fighter, destroyer, cruiser, dreadnaught, flagship }',
       'stackSize always derived from compositionTotal(composition)',
       'dominantType(): returns highest-tier ship present for badge icon',
-      'drawShipIcon(gfx, type, cx, cy, color): draws the correct icon shape',
+      'drawShipIcon(gfx, type, cx, cy, color): draws the correct icon shape per type',
       'Badge: team-coloured rect with ship icon (left) + count text (right)',
       'updateBadge(): recomputes stackSize and redraws badge',
-      'Exports: drawShipIcon, SHIP_TYPES, emptyComposition, compositionTotal, dominantType',
+      '_dead flag set immediately on removeStack() — guards update() against ghost calls',
+      'Arrival guard: if (this.path.length > 0 && !this._dead) before _advanceToNextNode()',
     ],
-    note: 'Ship icon geometry in drawShipIcon matches factory building drawIcon() exactly for visual consistency.'
+    note: 'Ship icon geometry in drawShipIcon matches factory building drawIcon() exactly for visual consistency across all UI surfaces.'
   },
   {
-    icon: '🗺',
-    title: 'Map Graph',
-    file: 'src/map/MapGraph.js',
-    lines: 240,
+    icon: '🗺', title: 'Map Graph', file: 'src/map/MapGraph.js', cyan: false,
     desc: 'Procedural star map generator. Archimedean spiral placement, seeded planet names, BFS pathfinding.',
     tags: ['Procedural', 'Spiral Layout', 'BFS', 'Pathfinding'],
     tagTypes: ['blue','blue','blue','green'],
     steps: [
-      '14 planets placed on Archimedean spiral, minimum 110px spacing',
+      'Planet count = 10 + (playerCount × 10); map size scales accordingly',
+      'Archimedean spiral placement with minimum spacing scaled to map size',
       'Planet names built from randomised syllable combinations',
       'Each planet guaranteed at least one edge to nearest neighbour',
       'Additional edges added to nearby planets for map density',
       'BFS bridge detection ensures full connectivity',
-      'findPath(from, to, adjacency): BFS shortest-path routing',
-      'Exports: NODES, EDGES, buildAdjacency, findPath',
+      'findPath(from, to, adjacency): BFS shortest-path routing used by all unit movement',
     ],
-    note: 'Refresh the page to regenerate a new map. No seed parameter yet — add one for reproducible maps.'
-  },
-  {
-    icon: '⚙',
-    title: 'Game Config',
-    file: 'src/main.js',
-    lines: 16,
-    desc: 'Phaser 3 config. 1280×720 canvas, 4 scenes in pipeline order.',
-    tags: ['1280×720', 'WebGL/Canvas', '4 Scenes'],
-    tagTypes: ['blue','yellow','blue'],
-    steps: [
-      'Imports BootScene, GameScene, UIScene, NodePanel',
-      '1280×720 canvas, transparent background',
-      'Scene order: Boot → Game (launches UI + NodePanel in parallel)',
-      'No physics engine — movement is manual vector math in Unit.update()',
-    ],
-    note: 'UIScene and NodePanel are launched by GameScene.create() via this.scene.launch().'
-  },
-  {
-    icon: '🔄',
-    title: 'CI/CD Pipeline',
-    file: '.github/workflows/deploy.yml',
-    lines: null,
-    desc: 'Auto-deploys to GitHub Pages on every push to main.',
-    tags: ['GitHub Actions', 'GitHub Pages', 'Free Hosting'],
-    tagTypes: ['green','green','green'],
-    steps: [
-      'Triggers on push to main branch',
-      'Validates all key files exist',
-      'Deploys to GitHub Pages',
-      'Live at: yourname.github.io/NodeGame',
-    ],
-    note: 'Enable Pages in repo Settings → Pages → Source → GitHub Actions.'
-  },
-  {
-    icon: '⬇',
-    title: 'Boot Scene',
-    file: 'src/scenes/BootScene.js',
-    lines: null,
-    desc: 'Asset preloader. Placeholder loading bar — no assets loaded yet (all graphics are procedural).',
-    tags: ['Preloader', 'Placeholder'],
-    tagTypes: ['yellow','yellow'],
-    steps: [
-      'Draws a loading progress bar',
-      'All graphics currently drawn procedurally in-code',
-      'Auto-transitions to GameScene when done',
-    ],
-    note: 'Uncomment load.image() calls here when you add sprite assets.'
+    note: 'Player start positions spread evenly around the spiral index. Each player gets 2 adjacent nodes — guaranteed by pickAdjacentNode().'
   },
 ];
 
-const nextSteps = [
-  { done: true,  title: 'Node-based movement',     desc: 'Stacks travel graph edges in real-time' },
-  { done: true,  title: 'Combat resolution',        desc: 'Stack combat with destroyer pre-strike' },
-  { done: true,  title: 'Planet ownership',         desc: 'Rings, capture, ownership persistence' },
-  { done: true,  title: 'Resource system',          desc: 'Food/metal/fuel ticks from owned planets' },
-  { done: true,  title: 'Buildings + construction', desc: '7 buildings, timers, cost deduction' },
-  { done: true,  title: 'Unit production',          desc: 'Factories spawn ships on timers' },
-  { done: true,  title: 'Ship types + composition', desc: '5 ship types, badge icons, merge/split' },
-  { done: true,  title: 'Flagship / game over',     desc: 'Lose when flagship is destroyed' },
-  { done: false, title: 'Cruiser ability',          desc: 'Define and implement cruiser special role' },
-  { done: false, title: 'Dreadnaught ability',      desc: 'Define and implement dreadnaught special role' },
-  { done: false, title: 'Planet upgrading',         desc: 'Click planet card to upgrade outpost level' },
-  { done: false, title: 'Enemy AI',                 desc: 'Basic AI: expand, build, attack' },
-  { done: false, title: 'Win condition',            desc: 'Destroy enemy flagship or capture all planets' },
-  { done: false, title: 'Sound effects',            desc: 'Combat, production, capture audio cues' },
-  { done: false, title: 'Multiplayer / persistence',desc: 'Supabase backend for save games or online play' },
+const asteroidModules = [
+  {
+    icon: '☄', title: 'Asteroid Manager', file: 'src/asteroids/AsteroidManager.js', cyan: true,
+    desc: 'Spawns and updates all asteroids every 3 seconds. Owns all AsteroidMiner instances. Draws radius rings.',
+    tags: ['Projectiles', 'Spawn System', 'Miner Owner', 'Meteor Impact'],
+    tagTypes: ['cyan','cyan','cyan','red'],
+    steps: [
+      'Spawns one asteroid every 3s: 60% regular (grey), 25% rich (gold), 15% meteor (red)',
+      'All types travel at 60 px/s — standardised for predictable reaction time',
+      'Regular/rich: random inward direction (±80° from edge normal)',
+      'Meteor: targets farthest node from spawn point; aims directly at it',
+      'Meteor impact: 30% per-unit destruction roll; cruiser repair (50%) applies',
+      '_minerGfx layer: draws radius rings (dim normally, bright when planet selected)',
+      'addMiner(nodeId) / removeMiner(nodeId) / getMinersForNode(nodeId)',
+      'Asteroid._minedBy claim system prevents two miners targeting the same rock',
+      '_isOutOfBounds() + _dead flag: two removal conditions in the update loop',
+    ],
+    note: 'This is the template for all future free-moving objects (missiles, projectiles). Spawn → move each update() → check arrival/intercept → fire resolution event.'
+  },
+  {
+    icon: '⛏', title: 'Asteroid Miner', file: 'src/asteroids/AsteroidMiner.js', cyan: true,
+    desc: 'Autonomous 4-state mining unit. Intercepts asteroids and meteors within 160px of home planet. Cannot be moved or destroyed.',
+    tags: ['Autonomous', 'State Machine', 'Meteor Intercept', 'Indestructible'],
+    tagTypes: ['cyan','cyan','red','cyan'],
+    steps: [
+      'States: idle → flying → mining → returning',
+      'Scans for targets each idle frame — meteors take absolute priority',
+      'Prioritises meteors targeting own home planet above all other targets',
+      'Mining a meteor marks it _dead, cancelling _triggerMeteorImpact()',
+      'Mining rate: 4000ms to fully extract an asteroid',
+      'If asteroid exits range mid-mine: collects partial resources, returns early',
+      'On deposit: adds cargo to scene.resources, fires logEvent, resets cargo',
+      'asteroidMinerStateChanged event emitted on every state transition — NodePanel listens',
+      'No hit zone — not clickable. Find via planet node or asteroid click.',
+    ],
+    note: 'Speed is 90 px/s (faster than all asteroids at 60 px/s) so it can intercept any asteroid it can reach in time.'
+  },
 ];
 
-let activeIdx = null;
-const cardsEl  = document.getElementById('cards');
-const detailEl = document.getElementById('detail');
+const phaseA = [
+  { done: true,  title: 'Node-based movement',      desc: 'Stacks travel graph edges in real-time' },
+  { done: true,  title: 'Combat resolution',         desc: '3-phase: pre-strike, simultaneous, repair' },
+  { done: true,  title: 'Planet ownership',          desc: 'Rings, capture, ownership persistence' },
+  { done: true,  title: 'Resource system',           desc: 'Food/metal/fuel ticks from owned planets' },
+  { done: true,  title: 'Buildings + construction',  desc: '8 buildings, timers, cost deduction' },
+  { done: true,  title: 'Unit production',           desc: 'Factories spawn ships on timers' },
+  { done: true,  title: 'Ship types + composition',  desc: '5 ship types, badge icons, merge/split' },
+  { done: true,  title: 'Flagship / game over',      desc: 'Lose when flagship is destroyed' },
+  { done: true,  title: 'Asteroid system',           desc: '3 types: regular, rich, meteor with impact' },
+  { done: true,  title: 'Asteroid miners',           desc: 'Autonomous unit, meteor intercept, deposit' },
+  { done: false, title: 'Research tree',             desc: 'Unlocks ship upgrades + building tiers. Core replayability.' },
+  { done: false, title: 'Ship upgrades',             desc: 'Pairs with Research — fleet identity each game.' },
+  { done: false, title: 'Building upgrades + Power', desc: 'Energy cap per planet forces hard build choices.' },
+  { done: false, title: 'Missile carriers',          desc: 'Ranged unit using projectile system.' },
+  { done: false, title: 'Planetary defense',         desc: 'Building with intercept radius. Counters missiles + meteors.' },
+  { done: false, title: 'Win condition',             desc: 'Destroy all flagships or capture planet threshold.' },
+];
 
-modules.forEach((m, i) => {
-  const card = document.createElement('div');
-  card.className = 'card';
-  card.innerHTML = `
-    <div class="card-header">
-      <span class="icon">${m.icon}</span>
-      <span class="card-title">${m.title}</span>
-    </div>
-    <div class="card-file">${m.file}</div>
-    ${m.lines ? `<div class="card-lines">${m.lines} lines</div>` : ''}
-    <div class="card-desc">${m.desc}</div>
-  `;
-  card.addEventListener('click', () => {
-    if (activeIdx === i) {
-      activeIdx = null;
-      detailEl.classList.remove('show');
-      card.classList.remove('active');
-      return;
-    }
-    document.querySelectorAll('.card').forEach(c => c.classList.remove('active'));
-    card.classList.add('active');
-    activeIdx = i;
+const phaseB = [
+  { done: false, title: 'Lightweight AI',            desc: 'Expand-nearest + attack-weakest. Enough for solo testing.' },
+  { done: false, title: 'Hotseat multiplayer',       desc: 'Shared browser, turn indicator. No networking needed.' },
+  { done: false, title: 'Sound effects',             desc: 'Combat, production, capture, impact.' },
+];
 
-    const tags  = m.tags.map((t, ti) => `<span class="tag ${m.tagTypes[ti]}">${t}</span>`).join('');
-    const steps = m.steps.map((s, si) => `<li><span class="num">${si+1}.</span>${s}</li>`).join('');
-    detailEl.innerHTML = `
-      <div class="detail-title">${m.icon} ${m.title.toUpperCase()} — ${m.file}</div>
-      <div class="detail-grid">
-        <div class="detail-section">
-          <h3>What it does</h3>
-          <ul class="step-list">${steps}</ul>
-        </div>
-        <div class="detail-section">
-          <h3>Tags</h3>
-          <div class="tag-list" style="margin-bottom:16px">${tags}</div>
-          <h3>Dev note</h3>
-          <p style="font-size:0.75rem;color:#7a9aba;line-height:1.6">${m.note}</p>
-        </div>
-      </div>
+const phaseC = [
+  { done: false, title: 'Networked multiplayer',     desc: 'WebSocket server, authoritative state. Supabase or Colyseus.' },
+  { done: false, title: 'Stealth + visibility',      desc: 'Fog of war, cloaking. Requires multiplayer to test.' },
+  { done: false, title: 'Full AI',                   desc: 'Deep AI — only worth investing in once features are stable.' },
+];
+
+let activeMain = null, activeAsteroid = null;
+
+function renderCards(mods, containerId, detailId, activeRef, setActive, cyan) {
+  const container = document.getElementById(containerId);
+  const detail    = document.getElementById(detailId);
+  mods.forEach((m, i) => {
+    const card = document.createElement('div');
+    card.className = 'card' + (m.cyan ? ' cyan' : '');
+    card.innerHTML = `
+      <div class="card-header"><span class="icon">${m.icon}</span><span class="card-title">${m.title}</span></div>
+      <div class="card-file">${m.file}</div>
+      <div class="card-desc">${m.desc}</div>
     `;
-    detailEl.classList.add('show');
-    detailEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  });
-  cardsEl.appendChild(card);
-});
-
-const stepsEl = document.getElementById('steps');
-nextSteps.forEach(s => {
-  const li = document.createElement('li');
-  if (s.done) li.classList.add('done');
-  li.innerHTML = `<span class="check">${s.done ? '✅' : '☐'}</span><div><b>${s.title}</b>${s.desc}</div>`;
-  if (!s.done) {
-    li.style.cursor = 'pointer';
-    li.addEventListener('click', () => {
-      const isDone = li.querySelector('.check').textContent === '✅';
-      li.querySelector('.check').textContent = isDone ? '☐' : '✅';
-      li.classList.toggle('done', !isDone);
+    card.addEventListener('click', () => {
+      if (setActive() === i) {
+        activeRef.val = null;
+        detail.classList.remove('show');
+        card.classList.remove('active');
+        return;
+      }
+      container.querySelectorAll('.card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      activeRef.val = i;
+      const tags  = m.tags.map((t, ti) => `<span class="tag ${m.tagTypes[ti]}">${t}</span>`).join('');
+      const steps = m.steps.map((s, si) => `<li><span class="num">${si+1}.</span>${s}</li>`).join('');
+      detail.innerHTML = `
+        <div class="detail-title">${m.icon} ${m.title.toUpperCase()} — ${m.file}</div>
+        <div class="detail-grid">
+          <div class="detail-section"><h3>What it does</h3><ul class="step-list">${steps}</ul></div>
+          <div class="detail-section">
+            <h3>Tags</h3><div class="tag-list" style="margin-bottom:16px">${tags}</div>
+            <h3>Dev note</h3><p style="font-size:0.75rem;color:#7a9aba;line-height:1.6">${m.note}</p>
+          </div>
+        </div>
+      `;
+      detail.classList.add('show');
+      detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
-  }
-  stepsEl.appendChild(li);
-});
+    container.appendChild(card);
+  });
+}
+
+const mainRef = { val: null };
+const astRef  = { val: null };
+renderCards(modules,         'cards',         'detail',          mainRef, () => mainRef.val);
+renderCards(asteroidModules, 'asteroid-cards','asteroid-detail', astRef,  () => astRef.val);
+
+function renderPhase(items, containerId) {
+  const el = document.getElementById(containerId);
+  items.forEach(s => {
+    const li = document.createElement('div');
+    li.className = 'roadmap-item' + (s.done ? ' done' : '');
+    li.innerHTML = `<span class="ri-check">${s.done ? '✅' : '☐'}</span><div><b>${s.title}</b><span>${s.desc}</span></div>`;
+    if (!s.done) {
+      li.addEventListener('click', () => {
+        const isDone = li.querySelector('.ri-check').textContent === '✅';
+        li.querySelector('.ri-check').textContent = isDone ? '☐' : '✅';
+        li.classList.toggle('done', !isDone);
+      });
+    }
+    el.appendChild(li);
+  });
+}
+
+renderPhase(phaseA, 'phase-a');
+renderPhase(phaseB, 'phase-b');
+renderPhase(phaseC, 'phase-c');
 </script>
 </body>
 </html>

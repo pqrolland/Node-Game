@@ -4,6 +4,7 @@ import GameScene      from './scenes/GameScene.js';
 import UIScene        from './scenes/UIScene.js';
 import NodePanel      from './scenes/NodePanel.js';
 import TooltipScene   from './scenes/TooltipScene.js';
+import ResearchScene  from './scenes/ResearchScene.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -12,7 +13,7 @@ const config = {
   parent: 'game-container',
   backgroundColor: '#080c14',
   // Scenes run in order — later scenes render ON TOP of earlier ones
-  scene: [BootScene, MainMenuScene, GameScene, UIScene, NodePanel, TooltipScene],
+  scene: [BootScene, MainMenuScene, GameScene, UIScene, NodePanel, TooltipScene, ResearchScene],
 };
 
 const game = new Phaser.Game(config);

@@ -147,6 +147,7 @@ export default class GameScene extends Phaser.Scene {
     this.scene.launch('UIScene');
     this.scene.launch('NodePanel');
     this.scene.launch('TooltipScene');
+    this.scene.launch('ResearchScene');
 
     // Listen for split requests from NodePanel
     this.game.events.on('splitStack', this.handleSplit, this);
@@ -733,6 +734,9 @@ export default class GameScene extends Phaser.Scene {
       this.resources.metal += node.metal || 0;
       this.resources.fuel  += node.fuel  || 0;
     });
+
+    // Accrue 2 research points per tick
+    this.game.events.emit('researchAddRP', 2);
 
     this.updateHUD();
   }
