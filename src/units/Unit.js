@@ -86,7 +86,9 @@ export default class Unit extends Phaser.GameObjects.Container {
     this.speed       = 90;
     this.isSelected  = false;
     this.isMoving    = false;
-    this._dead       = false;  // set to true immediately by removeStack
+    this._dead       = false;
+    this.inCombat    = false;   // locked during active battle
+    this.unitHP      = null;    // populated by CombatManager.syncUnitHP()
 
     // Composition — default to all fighters if not specified
     this.composition = composition || { ...emptyComposition(), fighter: stackSize };
@@ -143,6 +145,10 @@ export default class Unit extends Phaser.GameObjects.Container {
     this.ring.setVisible(false);
     this.add(this.ring);
 
+    // Health bar — shown during combat, drawn below badge
+    this.healthBarGfx = scene.add.graphics();
+    this.add(this.healthBarGfx);
+
     this._drawBadge();
 
     scene.add.existing(this);
@@ -187,6 +193,54 @@ export default class Unit extends Phaser.GameObjects.Container {
     this.ring.setVisible(val);
   }
 
+  // Show or hide the standard badge (hidden during combat, overlay takes over)
+  setBadgeVisible(visible) {
+    this.badgeBg.setVisible(visible);
+    this.badgeIcon.setVisible(visible);
+    this.badge.setVisible(visible);
+  }
+
+  // ── Health bar (shown during combat) ─────────────────────────────────────
+  updateHealthBar() {
+    const g = this.healthBarGfx;
+    g.clear();
+    if (!this.unitHP) return;
+
+    const SHIP_ORDER = ['fighter','destroyer','cruiser','dreadnaught','flagship'];
+    const MAX_HP     = { fighter: 10, destroyer: 20, cruiser: 20, dreadnaught: 50, flagship: 60 };
+    const COL        = {
+      fighter: 0x44aaff, destroyer: 0xaa66ff, cruiser: 0x44ddaa,
+      dreadnaught: 0xff8844, flagship: 0xffdd44,
+    };
+    const BAR_W = 38, BAR_H = 3, GAP = 2;
+
+    const types = SHIP_ORDER.filter(t => (this.unitHP[t]?.length || 0) > 0);
+    if (!types.length) return;
+
+    let dy = this._badgeY + (this._badgeH || 18) / 2 + 5;
+
+    for (const type of types) {
+      const hps      = this.unitHP[type];
+      const maxTotal = hps.length * MAX_HP[type];
+      const curTotal = hps.reduce((s, h) => s + h, 0);
+      const pct      = maxTotal > 0 ? Math.max(0, curTotal / maxTotal) : 0;
+      const col      = COL[type] || 0xffffff;
+
+      g.fillStyle(0x000000, 0.65);
+      g.fillRect(-BAR_W / 2, dy, BAR_W, BAR_H);
+      g.fillStyle(col, 0.95);
+      g.fillRect(-BAR_W / 2, dy, Math.round(BAR_W * pct), BAR_H);
+      g.lineStyle(0.5, col, 0.4);
+      g.strokeRect(-BAR_W / 2, dy, BAR_W, BAR_H);
+
+      dy += BAR_H + GAP;
+    }
+  }
+
+  clearHealthBar() {
+    this.healthBarGfx?.clear();
+  }
+
   assignPath(nodeIds) {
     if (!nodeIds || nodeIds.length < 2) return;
     this.path = nodeIds.slice(1);
@@ -194,7 +248,7 @@ export default class Unit extends Phaser.GameObjects.Container {
   }
 
   update(nodeMap, delta) {
-    if (this._dead || !this.isMoving || !this.targetNode) return;
+    if (this._dead || this.inCombat || !this.isMoving || !this.targetNode) return;
 
     const target = nodeMap.get(this.targetNode);
     if (!target) return;

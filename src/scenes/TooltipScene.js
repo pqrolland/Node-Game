@@ -14,52 +14,65 @@ export const TOOLTIP_DEFS = {
   fighter: {
     name:  'Fighter',
     color: '#44aaff',
-    stats: [
-      { label: 'Attack',  value: '1' },
-      { label: 'Health',  value: '1' },
-    ],
-    desc:  'Basic unit. Produced by the Naval Base every 15s. First to die in combat.',
     role:  'Cannon Fodder',
+    stats: [
+      { label: 'HP',      value: '10' },
+      { label: 'Damage',  value: '5 / attack' },
+      { label: 'Attacks', value: '1 per round' },
+    ],
+    desc:  'Basic unit. Produced by the Naval Base every 15s. Cheapest and most numerous — dies fastest in drawn-out battles.',
   },
   destroyer: {
     name:  'Destroyer',
     color: '#aa66ff',
-    stats: [
-      { label: 'Attack',     value: '1' },
-      { label: 'Health',     value: '1' },
-      { label: 'Pre-Strike', value: 'Kills 2 fighters' },
-    ],
-    desc:  'Fires before combat starts, eliminating 2 enemy fighters per destroyer. Dies like a normal ship in the main phase.',
     role:  'Skirmisher',
+    stats: [
+      { label: 'HP',      value: '20' },
+      { label: 'Damage',  value: '10 / attack' },
+      { label: 'Attacks', value: '1 per round' },
+    ],
+    desc:  'Durable front-line ship. Double the HP of a fighter with twice the punch — an efficient all-rounder.',
   },
   cruiser: {
     name:  'Cruiser',
     color: '#44ddaa',
-    stats: [
-      { label: 'Attack', value: '1' },
-      { label: 'Health', value: '1' },
-      { label: 'Repair', value: '50% on death' },
-    ],
-    desc:  'When a cruiser is destroyed in combat, it has a 50% chance of repairing and returning to its stack.',
     role:  'Resilient Support',
+    stats: [
+      { label: 'HP',      value: '20' },
+      { label: 'Damage',  value: '10 × 2 / round' },
+      { label: 'Repair',  value: '50% on death' },
+    ],
+    desc:  'Fires twice per round — the same total damage as a destroyer but spread across two targets. When destroyed, 50% chance to repair and rejoin the fight at full HP.',
   },
   dreadnaught: {
     name:  'Dreadnaught',
     color: '#ff8844',
-    stats: [
-      { label: 'Attack', value: '4' },
-      { label: 'Health', value: '4' },
-    ],
-    desc:  'Counts as 4 units in combat — attacks with power 4 and requires 4 damage to destroy. The most powerful standard unit.',
     role:  'Heavy Warship',
+    stats: [
+      { label: 'HP',      value: '50' },
+      { label: 'Damage',  value: '20 × 2 / round' },
+      { label: 'Attacks', value: '2 per round' },
+    ],
+    desc:  'Heavily armoured capital ship. Requires concentrated fire to bring down and deals massive damage. The backbone of any serious fleet.',
+  },
+  flagship: {
+    name:  'Flagship',
+    color: '#ffdd44',
+    role:  'Command Ship',
+    stats: [
+      { label: 'HP',         value: '60' },
+      { label: 'Damage',     value: '20 × 2 / round' },
+      { label: 'Loss =',     value: 'Instant defeat' },
+    ],
+    desc:  'Your command ship. Hardiest unit in the fleet — the last to fall. If your flagship is destroyed, all your planets and units are lost immediately.',
   },
   asteroid_miner: {
     name:  'Asteroid Miner',
     color: '#44ffdd',
     role:  'Autonomous Mining Unit',
     stats: [
-      { label: 'Range',   value: '160px' },
-      { label: 'Speed',   value: '90 px/s' },
+      { label: 'Range',     value: '160 px' },
+      { label: 'Speed',     value: '90 px/s' },
       { label: 'Mine Time', value: '4 sec' },
     ],
     desc:  'Patrols its home planet radius. Intercepts asteroids and meteors, mines them fully, then returns resources to the planet. Cannot be moved or destroyed.',
@@ -71,17 +84,6 @@ export const TOOLTIP_DEFS = {
       gfx.fillStyle(0xffffff, 0.6);
       gfx.fillCircle(cx, cy, 1.5);
     },
-  },
-  flagship: {
-    name:  'Flagship',
-    color: '#ffdd44',
-    stats: [
-      { label: 'Attack',      value: '1' },
-      { label: 'Health',      value: '1' },
-      { label: 'Last to die', value: 'Always' },
-    ],
-    desc:  'Your command ship. Always the last unit destroyed. If your flagship is lost, you are defeated immediately.',
-    role:  'Command Ship',
   },
 };
 

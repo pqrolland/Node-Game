@@ -17,14 +17,18 @@ NodeGame/
 │   ├── scenes/
 │   │   ├── BootScene.js      # Asset preloader → routes to MainMenuScene
 │   │   ├── MainMenuScene.js  # Main menu — player count selector, How to Play, start game
-│   │   ├── GameScene.js      # Game loop, map, input, combat, ownership, resources, production
-│   │   ├── UIScene.js        # Top/bottom HUD, resource tooltips, game-over overlay
+│   │   ├── GameScene.js      # Game loop, map, input, ownership, resources, production, reinforcement logic
+│   │   ├── UIScene.js        # Top/bottom HUD, resource tooltips, research button, game-over overlay
 │   │   ├── NodePanel.js      # Node Panel — unit management, planet info, buildings, asteroid info
+│   │   ├── CombatScene.js    # Combat detail window — live HP bars, round countdown, per-ship breakdown
+│   │   ├── ResearchScene.js  # Research overlay — pool-based perk trees, research point spending
 │   │   └── TooltipScene.js   # Keyword tooltip overlay — ship and unit stat cards on hover
 │   ├── map/
 │   │   └── MapGraph.js       # Procedural spiral map generator + BFS pathfinding
 │   ├── units/
-│   │   └── Unit.js           # Stack class with ship composition, icons, movement
+│   │   └── Unit.js           # Stack class — composition, HP bar, badge, movement, setBadgeVisible
+│   ├── combat/
+│   │   └── CombatManager.js  # Round-based combat engine — HP pools, attack queues, overlay, events
 │   └── asteroids/
 │       ├── AsteroidManager.js  # Spawns and updates all asteroids; owns AsteroidMiner list
 │       └── AsteroidMiner.js    # Autonomous mining unit — intercepts asteroids and meteors
@@ -54,27 +58,35 @@ NodeGame/
 
 Each stack holds a **composition** of multiple ship types. The badge on the stack shows the highest-tier ship present plus the total count.
 
-| Ship | Attack | Health | Special Rule |
-|---|---|---|---|
-| Fighter | 1 | 1 | Basic unit — first to die in combat |
-| Destroyer | 1 | 1 | **Pre-strike:** kills 2 enemy fighters before combat resolves |
-| Cruiser | 1 | 1 | **Repair:** 50% chance to return after being destroyed |
-| Dreadnaught | 4 | 4 | Counts as 4 units — requires 4 damage to destroy |
-| Flagship | 1 | 1 | One per player — if destroyed, you lose the game immediately |
+| Ship | HP | Damage | Attacks/Round | Special |
+|---|---|---|---|---|
+| Fighter | 10 | 5 | 1 | Basic unit — produced every 15s |
+| Destroyer | 20 | 10 | 1 | Durable all-rounder |
+| Cruiser | 20 | 10 | 2 | Fires twice per round; **50% repair on death** |
+| Dreadnaught | 50 | 20 | 2 | Heavily armoured capital ship |
+| Flagship | 60 | 20 | 2 | One per player — **loss = instant defeat** |
 
-Hover any ship name in the **Unit Management panel** or **Build Modal** to see a full stat card for that ship type.
+Hover any ship name in the **Unit Management panel** or **Build Modal** to see a full stat card.
 
 ## ⚔ Combat
 
-When a stack arrives at an enemy-occupied node, combat resolves in three phases:
+Combat is **round-based**. When a hostile stack arrives at an occupied node, both sides lock in place and fight until one is destroyed. Rounds fire every **30 seconds**.
 
-1. **Destroyer pre-strike** — each destroyer kills 2 enemy fighters (or next lowest tier) before the main phase
-2. **Simultaneous attack** — both sides deal their full attack power at once. Damage is applied lowest-tier first: fighters → destroyers → cruisers → dreadnaughts → flagship. Dreadnaughts have 4 health and require 4 damage to destroy
-3. **Cruiser repair** — each cruiser destroyed in the main phase has a 50% chance of repairing and returning to the stack
+**Each round:**
+1. Every living ship generates attack instances equal to its *attacks/round* stat
+2. Each attack instance picks a **random enemy ship** and deals its damage directly to that ship's HP
+3. Ships that reach 0 HP are removed; cruisers have a **50% chance to repair** and rejoin at full HP
+4. Health bars and unit counts update on the map overlay and in the Combat Window
 
-If both stacks survive, the attacker retreats and the defender holds the node. Mutual destruction is possible.
+**Combat overlay** — while a battle is active, the two combat pill badges above the node replace the normal unit badges. The top pill shows the attacker (team colour + ship icon + count), the bottom shows the defender. A colour-coded arc ring counts down to the next round: green → yellow → red.
 
-Friendly stacks arriving at the same node **merge** — their compositions are combined.
+**Combat Window** — click either pill to open a detailed popup showing each ship type's remaining HP bar, total HP, and a live countdown to the next round. The window updates after every round and closes automatically when the battle ends.
+
+**Reinforcements** — sending additional friendly units to a node mid-battle seamlessly adds them to the combatant's next round. The battle is never interrupted.
+
+**Battle end** — the losing stack is destroyed. The winner's badge and free movement are restored immediately. Mutual destruction is possible.
+
+Friendly stacks arriving at the **same node** as an idle friendly stack **merge** compositions.
 
 **Flagship loss:** When a flagship is destroyed, all player units are removed, all owned planets are lost, and a defeat screen is shown.
 
@@ -206,12 +218,28 @@ Resource costs shown in **red** in the Build Modal when unaffordable. Already-bu
 
 ### Top Bar
 - **Left:** Pie chart of owned planet types · player name · planet count (updates live on capture)
-- **Right:** Total unit count · Food · Metal · Fuel
+- **Right:** Total unit count · Food · Metal · Fuel · **RESEARCH** button (shows current RP)
 
 ### Bottom Bar
 - **Left:** Selected stack info
 - **Centre:** Control hints
 - **Right:** Event log (last 3 events — arrivals, combat, merges, mining deposits, meteor intercepts)
+
+### Combat Overlay *(active during any battle)*
+Two pill badges replace the normal unit badge above the battle node:
+- **Top pill** — attacker: team-coloured ship icon + unit count
+- **Bottom pill** — defender: team-coloured ship icon + unit count
+- **Arc ring** — countdown to next round, animates green → yellow → red over 30 seconds
+- Clicking either pill opens the **Combat Window**
+
+### Combat Window *(click the combat overlay to open)*
+Floating popup centred on screen showing both sides in two columns:
+- Each ship type listed with icon, count, and a colour-coded HP bar
+- HP bar shifts from ship colour → orange → red as HP depletes
+- `current / max` HP label per ship type
+- Live countdown bar + "Next round in Xs" label, updates every frame
+- Round counter in header · ✕ close button
+- Updates automatically after every round; closes when the battle resolves
 
 ### Node Panel *(opens on clicking any node or asteroid)*
 - **Left — Unit Management:**
@@ -235,7 +263,7 @@ When an **asteroid** is clicked instead of a planet:
 - Already-built buildings dimmed and unselectable
 
 ### Tooltip Cards *(hover any highlighted unit name)*
-Each tooltip shows the unit's icon, role, stats, any special rules, and a description. Available for all ship types and the Asteroid Miner in every location where they are referenced — unit lists, build modal, and planet panels. Tooltips auto-anchor below the cursor and clamp to screen edges.
+Each tooltip shows the unit's icon, role, real HP/damage/attack stats, any special rules, and a description. Available for all ship types and the Asteroid Miner in every location where they are referenced.
 
 ---
 
