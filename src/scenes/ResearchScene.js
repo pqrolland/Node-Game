@@ -62,7 +62,473 @@ const SHIP_ICONS = {
   },
 };
 
-// ── Perk pool definitions ─────────────────────────────────────────────────────
+// ── Perk-specific icon draw functions ────────────────────────────────────────
+// Shared perk names (e.g. "Rapid Scramble") always use the same icon across trees.
+// Each function: (g, cx, cy, col) — draws into an existing graphics object.
+const PERK_ICONS = {
+  // ── Shared cross-tree perks ──────────────────────────────────────────────
+  // Rapid Scramble — lightning bolt (speed / launch rate)
+  'Rapid Scramble':      (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx + 2, cy - 8, cx - 3, cy, cx + 1, cy);
+    g.fillTriangle(cx - 1, cy, cx - 4, cy + 8, cx + 3, cy);
+  },
+  // Dense Formation — tight grid of dots
+  'Dense Formation':     (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    for (let r = -1; r <= 1; r++) for (let c = -1; c <= 1; c++) g.fillCircle(cx + c * 5, cy + r * 5, 2);
+  },
+  // Afterburner — flame trail / chevron stack
+  'Afterburner':         (g, cx, cy, col) => {
+    g.fillStyle(col, 1);    g.fillTriangle(cx, cy - 8, cx - 5, cy + 2, cx + 5, cy + 2);
+    g.fillStyle(col, 0.55); g.fillTriangle(cx, cy - 3, cx - 4, cy + 6, cx + 4, cy + 6);
+    g.fillStyle(col, 0.25); g.fillTriangle(cx, cy + 2, cx - 3, cy + 9, cx + 3, cy + 9);
+  },
+  // Wingman Protocol — two small ships side by side
+  'Wingman Protocol':    (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx - 5, cy - 8, cx - 9, cy + 4, cx - 1, cy + 4);
+    g.fillTriangle(cx + 5, cy - 8, cx + 1, cy + 4, cx + 9, cy + 4);
+  },
+  // Ace Pilots — star badge
+  'Ace Pilots':          (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    for (let i = 0; i < 5; i++) {
+      const a = (i * 4 * Math.PI / 5) - Math.PI / 2;
+      const b = a + 2 * Math.PI / 5;
+      g.fillTriangle(cx, cy, cx + Math.cos(a) * 8, cy + Math.sin(a) * 8, cx + Math.cos(b) * 3, cy + Math.sin(b) * 3);
+    }
+  },
+  // Hunter Protocol — crosshair / targeting reticle
+  'Hunter Protocol':     (g, cx, cy, col) => {
+    g.lineStyle(1.5, col, 1); g.strokeCircle(cx, cy, 6);
+    g.lineBetween(cx - 10, cy, cx - 7, cy); g.lineBetween(cx + 7, cy, cx + 10, cy);
+    g.lineBetween(cx, cy - 10, cx, cy - 7); g.lineBetween(cx, cy + 7, cx, cy + 10);
+  },
+  // Reinforced Hull — shield shape
+  'Reinforced Hull':     (g, cx, cy, col) => {
+    g.fillStyle(col, 0.22); g.fillTriangle(cx, cy + 9, cx - 8, cy - 7, cx + 8, cy - 7);
+    g.lineStyle(2, col, 1); g.strokeTriangle(cx, cy + 9, cx - 8, cy - 7, cx + 8, cy - 7);
+    g.lineStyle(1, col, 0.6); g.lineBetween(cx, cy - 7, cx, cy + 4);
+  },
+  // Last Stand — cracked/broken shield
+  'Last Stand':          (g, cx, cy, col) => {
+    g.fillStyle(col, 0.15); g.fillTriangle(cx, cy + 9, cx - 8, cy - 7, cx + 8, cy - 7);
+    g.lineStyle(1.5, col, 0.7); g.strokeTriangle(cx, cy + 9, cx - 8, cy - 7, cx + 8, cy - 7);
+    g.lineStyle(1.5, col, 1); g.lineBetween(cx, cy - 7, cx - 2, cy); g.lineBetween(cx - 2, cy, cx + 2, cy + 5);
+  },
+  // First Strike — arrow striking forward
+  'First Strike':        (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx, cy - 9, cx - 5, cy + 1, cx + 5, cy + 1);
+    g.fillRect(cx - 2, cy + 1, 4, 7);
+  },
+
+  // ── Fighter-only perks ───────────────────────────────────────────────────
+  // Swarm Tactics — cluster of small triangles
+  'Swarm Tactics':       (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx,     cy - 8, cx - 3, cy - 2, cx + 3, cy - 2);
+    g.fillTriangle(cx - 6, cy + 1, cx - 9, cy + 7, cx - 3, cy + 7);
+    g.fillTriangle(cx + 6, cy + 1, cx + 3, cy + 7, cx + 9, cy + 7);
+    g.fillStyle(col, 0.5);
+    g.fillTriangle(cx - 3, cy - 1, cx - 6, cy + 5, cx, cy + 5);
+    g.fillTriangle(cx + 3, cy - 1, cx, cy + 5, cx + 6, cy + 5);
+  },
+  // Interceptor Role — fighter with explosion burst
+  'Interceptor Role':    (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx, cy - 8, cx - 5, cy + 4, cx + 5, cy + 4);
+    g.lineStyle(1.5, col, 0.7);
+    for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; g.lineBetween(cx + Math.cos(a) * 7, cy + Math.sin(a) * 7, cx + Math.cos(a) * 10, cy + Math.sin(a) * 10); }
+  },
+  // Air Superiority — fighter with orbit ring
+  'Air Superiority':     (g, cx, cy, col) => {
+    g.fillStyle(col, 1); g.fillTriangle(cx, cy - 6, cx - 4, cy + 4, cx + 4, cy + 4);
+    g.lineStyle(1.5, col, 0.6); g.strokeEllipse(cx, cy + 1, 18, 9);
+  },
+  // Kamikaze Protocol — skull / explosion X
+  'Kamikaze Protocol':   (g, cx, cy, col) => {
+    g.fillStyle(col, 0.2); g.fillCircle(cx, cy - 1, 7);
+    g.lineStyle(1.5, col, 1); g.strokeCircle(cx, cy - 1, 7);
+    g.lineBetween(cx - 4, cy + 5, cx + 4, cy + 8);
+    g.lineBetween(cx - 3, cy + 4, cx - 3, cy + 8);
+    g.lineBetween(cx + 3, cy + 4, cx + 3, cy + 8);
+  },
+
+  // ── Destroyer-only perks ─────────────────────────────────────────────────
+  // Improved Barrage — 3 vertical shots
+  'Improved Barrage':    (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    for (let i = -1; i <= 1; i++) { g.fillRect(cx + i * 5 - 1, cy - 8, 3, 10); g.fillTriangle(cx + i * 5, cy - 10, cx + i * 5 - 2, cy - 6, cx + i * 5 + 2, cy - 6); }
+    g.lineStyle(1, col, 0.5); g.lineBetween(cx - 8, cy + 3, cx + 8, cy + 3);
+  },
+  // Torpedo Spread — two angled torpedoes
+  'Torpedo Spread':      (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx - 6, cy - 8, cx - 10, cy + 4, cx - 2, cy + 4);
+    g.fillTriangle(cx + 6, cy - 8, cx + 2, cy + 4, cx + 10, cy + 4);
+    g.fillStyle(col, 0.5);
+    g.fillRect(cx - 7, cy + 4, 4, 4);
+    g.fillRect(cx + 3, cy + 4, 4, 4);
+  },
+  // Hit and Run — arrow curving away
+  'Hit and Run':         (g, cx, cy, col) => {
+    g.lineStyle(2, col, 1);
+    g.lineBetween(cx - 8, cy + 4, cx + 2, cy - 6);
+    g.lineBetween(cx + 2, cy - 6, cx + 8, cy - 2);
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx + 8, cy - 8, cx + 4, cy - 2, cx + 10, cy + 0);
+  },
+
+  // ── Cruiser-only perks ───────────────────────────────────────────────────
+  // Field Medics — cross / plus sign
+  'Field Medics':        (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillRect(cx - 2, cy - 9, 4, 18);
+    g.fillRect(cx - 9, cy - 2, 18, 4);
+  },
+  // Nanite Repair — circular arrows
+  'Nanite Repair':       (g, cx, cy, col) => {
+    g.lineStyle(2, col, 1); g.strokeCircle(cx, cy, 7);
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx + 7, cy - 3, cx + 4, cy - 7, cx + 10, cy - 7);
+    g.fillTriangle(cx - 7, cy + 3, cx - 4, cy + 7, cx - 10, cy + 7);
+  },
+  // Escort Formation — large ship shielding small ship
+  'Escort Formation':    (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx + 4, cy - 8, cx, cy + 8, cx + 8, cy + 8);
+    g.fillStyle(col, 0.5);
+    g.fillTriangle(cx - 4, cy - 4, cx - 7, cy + 4, cx - 1, cy + 4);
+    g.lineStyle(1.5, col, 0.8); g.lineBetween(cx - 2, cy - 8, cx - 2, cy + 8);
+  },
+  // Regeneration Field — radiating rings
+  'Regeneration Field':  (g, cx, cy, col) => {
+    g.lineStyle(2, col, 1);    g.strokeCircle(cx, cy, 3);
+    g.lineStyle(1.5, col, 0.6); g.strokeCircle(cx, cy, 6);
+    g.lineStyle(1, col, 0.3);  g.strokeCircle(cx, cy, 9);
+  },
+  // Shielded Core — concentric hexagon
+  'Shielded Core':       (g, cx, cy, col) => {
+    const hex = (r, a=0.15) => { g.lineStyle(1.5, col, a); const pts=[]; for(let i=0;i<6;i++){const an=i*Math.PI/3-Math.PI/6; pts.push({x:cx+Math.cos(an)*r,y:cy+Math.sin(an)*r});} g.strokePoints(pts, true); };
+    hex(9, 0.8); hex(5, 0.5);
+    g.fillStyle(col, 1); g.fillCircle(cx, cy, 2);
+  },
+
+  // ── Dreadnaught-only perks ───────────────────────────────────────────────
+  // Siege Cannons — three thick barrel shapes
+  'Siege Cannons':       (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillRect(cx - 1, cy - 9, 3, 12);
+    g.fillStyle(col, 0.7);
+    g.fillRect(cx - 6, cy - 6, 3, 9);
+    g.fillRect(cx + 4, cy - 6, 3, 9);
+    g.lineStyle(1, col, 0.4); g.lineBetween(cx - 8, cy + 3, cx + 9, cy + 3);
+  },
+  // Orbital Strike — planet with beam
+  'Orbital Strike':      (g, cx, cy, col) => {
+    g.fillStyle(col, 0.2); g.fillCircle(cx, cy - 2, 7);
+    g.lineStyle(1.5, col, 0.9); g.strokeCircle(cx, cy - 2, 7);
+    g.fillStyle(col, 1); g.fillRect(cx - 1, cy + 5, 3, 6);
+    g.fillTriangle(cx, cy + 11, cx - 3, cy + 6, cx + 3, cy + 6);
+  },
+  // Mass Driver — single massive accelerator
+  'Mass Driver':         (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillRect(cx - 2, cy - 9, 4, 14);
+    g.fillStyle(col, 0.5); g.fillRect(cx - 5, cy - 4, 11, 4);
+    g.fillStyle(col, 1); g.fillCircle(cx, cy + 7, 3);
+  },
+  // Living Fortress — castle tower
+  'Living Fortress':     (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillRect(cx - 7, cy - 4, 14, 12);
+    g.fillRect(cx - 7, cy - 8, 3, 5); g.fillRect(cx - 1, cy - 8, 3, 5); g.fillRect(cx + 4, cy - 8, 3, 5);
+    g.fillStyle(0x080c14, 1); g.fillRect(cx - 2, cy + 1, 5, 7);
+  },
+
+  // ── Flagship-only perks ──────────────────────────────────────────────────
+  // Command Aura — radiating flag/beacon
+  'Command Aura':        (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx, cy - 9, cx - 6, cy - 1, cx + 6, cy - 1);
+    g.fillTriangle(cx - 6, cy - 1, cx + 6, cy - 1, cx, cy + 9);
+    g.fillStyle(0xffffff, 0.9); g.fillCircle(cx, cy, 2);
+    g.lineStyle(1, col, 0.4); g.strokeCircle(cx, cy, 11);
+  },
+  // Emergency Shield — shield with lightning bolt
+  'Emergency Shield':    (g, cx, cy, col) => {
+    g.fillStyle(col, 0.2); g.fillTriangle(cx, cy + 9, cx - 8, cy - 6, cx + 8, cy - 6);
+    g.lineStyle(2, col, 1); g.strokeTriangle(cx, cy + 9, cx - 8, cy - 6, cx + 8, cy - 6);
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx + 2, cy - 4, cx - 2, cy + 1, cx + 1, cy + 1);
+    g.fillTriangle(cx - 1, cy + 1, cx - 3, cy + 6, cx + 2, cy + 1);
+  },
+  // Rally Beacon — flag on pole
+  'Rally Beacon':        (g, cx, cy, col) => {
+    g.lineStyle(2, col, 1); g.lineBetween(cx - 3, cy - 9, cx - 3, cy + 9);
+    g.fillStyle(col, 1);    g.fillTriangle(cx - 3, cy - 9, cx + 7, cy - 5, cx - 3, cy - 1);
+    g.lineStyle(1, col, 0.5); g.lineBetween(cx - 7, cy + 9, cx + 5, cy + 9);
+  },
+  // Iron Reserve — resource chest / ingot stack
+  'Iron Reserve':        (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillRect(cx - 8, cy + 2, 16, 6); g.fillRect(cx - 6, cy - 2, 12, 5); g.fillRect(cx - 4, cy - 6, 8, 5);
+    g.fillStyle(0x080c14, 0.5); g.fillRect(cx - 6, cy + 3, 4, 4); g.fillRect(cx + 2, cy + 3, 4, 4);
+  },
+  // Naval Construction — ship under construction (girder outline)
+  'Naval Construction':  (g, cx, cy, col) => {
+    g.fillStyle(col, 0.5); g.fillTriangle(cx, cy - 7, cx - 7, cy + 5, cx + 7, cy + 5);
+    g.lineStyle(1.5, col, 1);
+    g.lineBetween(cx - 9, cy + 5, cx + 9, cy + 5);
+    g.lineBetween(cx - 6, cy + 5, cx - 4, cy - 3);
+    g.lineBetween(cx + 6, cy + 5, cx + 4, cy - 3);
+    g.lineBetween(cx - 5, cy + 1, cx + 5, cy + 1);
+  },
+  // Spearhead — diamond arrowhead
+  'Spearhead':           (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx, cy - 9, cx - 6, cy, cx + 6, cy);
+    g.fillStyle(col, 0.6);
+    g.fillTriangle(cx, cy - 3, cx - 4, cy + 5, cx + 4, cy + 5);
+    g.fillStyle(col, 0.3);
+    g.fillTriangle(cx - 2, cy + 3, cx - 5, cy + 9, cx + 5, cy + 9);
+  },
+
+  // ── Econ Buildings perks ─────────────────────────────────────────────────
+  // Advanced Farming — leaf sprout
+  'Advanced Farming':    (g, cx, cy, col) => {
+    g.lineStyle(2, col, 1); g.lineBetween(cx, cy + 9, cx, cy - 2);
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx, cy - 8, cx - 7, cy + 0, cx + 1, cy + 0);
+    g.fillTriangle(cx, cy - 2, cx - 1, cy + 4, cx + 7, cy - 1);
+  },
+  // Efficient Smelting — anvil shape
+  'Efficient Smelting':  (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillRect(cx - 7, cy + 2, 14, 6);
+    g.fillRect(cx - 5, cy - 4, 10, 7);
+    g.fillRect(cx - 2, cy - 8, 5, 5);
+  },
+  // Fusion Tap — fuel cell / cylinder
+  'Fusion Tap':          (g, cx, cy, col) => {
+    g.fillStyle(col, 1); g.fillEllipse(cx, cy - 6, 12, 5);
+    g.fillRect(cx - 6, cy - 6, 12, 12);
+    g.fillEllipse(cx, cy + 6, 12, 5);
+    g.fillStyle(0x080c14, 0.6); g.fillEllipse(cx, cy - 6, 8, 3);
+  },
+  // Supply Network — nodes connected by lines
+  'Supply Network':      (g, cx, cy, col) => {
+    g.lineStyle(1.5, col, 0.7);
+    g.lineBetween(cx, cy - 7, cx - 7, cy + 5); g.lineBetween(cx, cy - 7, cx + 7, cy + 5); g.lineBetween(cx - 7, cy + 5, cx + 7, cy + 5);
+    g.fillStyle(col, 1);
+    g.fillCircle(cx, cy - 7, 3); g.fillCircle(cx - 7, cy + 5, 3); g.fillCircle(cx + 7, cy + 5, 3);
+  },
+  // Megaplex — large building with star
+  'Megaplex':            (g, cx, cy, col) => {
+    g.fillStyle(col, 1); g.fillRect(cx - 7, cy - 4, 14, 12);
+    g.fillStyle(0x080c14, 1); g.fillRect(cx - 5, cy - 2, 4, 4); g.fillRect(cx + 1, cy - 2, 4, 4);
+    g.fillStyle(col, 1); g.fillTriangle(cx, cy - 10, cx - 3, cy - 5, cx + 3, cy - 5);
+  },
+  // Balanced Logistics — balance scales
+  'Balanced Logistics':  (g, cx, cy, col) => {
+    g.lineStyle(1.5, col, 1);
+    g.lineBetween(cx, cy - 8, cx, cy + 6);
+    g.lineBetween(cx - 8, cy - 3, cx + 8, cy - 3);
+    g.lineBetween(cx - 8, cy - 3, cx - 8, cy + 1);
+    g.lineBetween(cx + 8, cy - 3, cx + 8, cy + 1);
+    g.fillStyle(col, 0.7); g.fillEllipse(cx - 8, cy + 3, 7, 4); g.fillEllipse(cx + 8, cy + 3, 7, 4);
+    g.lineStyle(1, col, 0.4); g.lineBetween(cx - 6, cy + 8, cx + 6, cy + 8);
+  },
+  // Deep Excavation — drill bit
+  'Deep Excavation':     (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx, cy + 9, cx - 4, cy - 2, cx + 4, cy - 2);
+    g.fillRect(cx - 4, cy - 8, 8, 7);
+    g.fillStyle(col, 0.5);
+    g.fillRect(cx - 6, cy - 9, 12, 2);
+  },
+  // Bunker Economy — fortified vault door
+  'Bunker Economy':      (g, cx, cy, col) => {
+    g.fillStyle(col, 1); g.fillRoundedRect(cx - 8, cy - 8, 16, 16, 2);
+    g.fillStyle(0x080c14, 1); g.fillCircle(cx, cy, 5);
+    g.fillStyle(col, 1); g.fillCircle(cx, cy, 2);
+    g.lineStyle(1.5, 0x080c14, 1);
+    g.lineBetween(cx - 3, cy - 3, cx + 3, cy + 3);
+    g.lineBetween(cx + 3, cy - 3, cx - 3, cy + 3);
+  },
+  // Trade Routes — two arrows exchanging
+  'Trade Routes':        (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx + 8, cy - 4, cx + 3, cy - 8, cx + 3, cy - 1);
+    g.lineStyle(2, col, 1); g.lineBetween(cx + 3, cy - 5, cx - 6, cy - 5);
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx - 8, cy + 4, cx - 3, cy + 8, cx - 3, cy + 1);
+    g.lineStyle(2, col, 1); g.lineBetween(cx - 3, cy + 5, cx + 6, cy + 5);
+  },
+  // Enriched Mining — asteroid with sparkle
+  'Enriched Mining':     (g, cx, cy, col) => {
+    g.fillStyle(col, 0.6); g.fillCircle(cx - 1, cy, 7);
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx + 5, cy - 6, cx + 4, cy - 3, cx + 7, cy - 3);
+    g.fillTriangle(cx + 7, cy - 5, cx + 4, cy - 5, cx + 4, cy - 2);
+  },
+
+  // ── Econ Ships perks ─────────────────────────────────────────────────────
+  // Improved Drills — drill icon
+  'Improved Drills':     (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx, cy + 9, cx - 3, cy - 2, cx + 3, cy - 2);
+    g.fillRect(cx - 4, cy - 8, 8, 7);
+    g.fillStyle(col, 0.5); g.fillRect(cx - 6, cy - 10, 12, 3);
+    g.lineStyle(1, col, 0.7); g.lineBetween(cx - 5, cy, cx + 5, cy);
+  },
+  // Cargo Hold Mk II — crate with + mark
+  'Cargo Hold Mk II':    (g, cx, cy, col) => {
+    g.fillStyle(col, 0.2); g.fillRect(cx - 8, cy - 7, 16, 14);
+    g.lineStyle(2, col, 1); g.strokeRect(cx - 8, cy - 7, 16, 14);
+    g.lineStyle(1.5, col, 0.7); g.lineBetween(cx, cy - 7, cx, cy + 7); g.lineBetween(cx - 8, cy, cx + 8, cy);
+  },
+  // Extended Range — expanding circles
+  'Extended Range':      (g, cx, cy, col) => {
+    g.fillStyle(col, 1); g.fillCircle(cx, cy, 2);
+    g.lineStyle(1.5, col, 0.7); g.strokeCircle(cx, cy, 5);
+    g.lineStyle(1.5, col, 0.4); g.strokeCircle(cx, cy, 9);
+  },
+  // Dual Miner Bays — two miner ships
+  'Dual Miner Bays':     (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx - 5, cy - 7, cx - 9, cy + 3, cx - 1, cy + 3);
+    g.fillTriangle(cx + 5, cy - 7, cx + 1, cy + 3, cx + 9, cy + 3);
+    g.fillStyle(0x080c14, 1); g.fillCircle(cx - 5, cy - 1, 2); g.fillCircle(cx + 5, cy - 1, 2);
+    g.lineStyle(1, col, 0.5); g.lineBetween(cx - 2, cy + 5, cx + 2, cy + 5);
+  },
+  // Rich Vein Scanner — scanner sweep
+  'Rich Vein Scanner':   (g, cx, cy, col) => {
+    g.fillStyle(col, 0.15); g.slice(cx, cy + 2, 9, -Math.PI * 0.9, -Math.PI * 0.1, false); g.fillPath();
+    g.lineStyle(1.5, col, 1); g.strokeCircle(cx, cy + 2, 9);
+    g.lineStyle(2, col, 0.9); g.lineBetween(cx, cy + 2, cx - 6, cy - 5);
+    g.fillStyle(col, 1); g.fillCircle(cx, cy + 2, 2);
+  },
+  // Deep Core Mining — multiple drill bits
+  'Deep Core Mining':    (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx - 5, cy + 8, cx - 8, cy - 1, cx - 2, cy - 1);
+    g.fillTriangle(cx + 5, cy + 8, cx + 2, cy - 1, cx + 8, cy - 1);
+    g.fillRect(cx - 7, cy - 7, 5, 7); g.fillRect(cx + 2, cy - 7, 5, 7);
+    g.fillStyle(col, 0.5); g.fillRect(cx - 9, cy - 9, 9, 2); g.fillRect(cx, cy - 9, 9, 2);
+  },
+  // Meteor Harvesting — meteor with catch net
+  'Meteor Harvesting':   (g, cx, cy, col) => {
+    g.fillStyle(col, 0.7); g.fillCircle(cx - 3, cy - 2, 5);
+    g.lineStyle(1.5, col, 0.6);
+    for (let i = 0; i < 5; i++) { const a = i * Math.PI / 4 + Math.PI / 4; g.lineBetween(cx - 3 + Math.cos(a) * 5, cy - 2 + Math.sin(a) * 5, cx + 5, cy + 6); }
+  },
+  // Scout Drones — small diamond probe
+  'Scout Drones':        (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx, cy - 9, cx - 4, cy, cx + 4, cy);
+    g.fillTriangle(cx - 4, cy, cx + 4, cy, cx, cy + 9);
+    g.fillStyle(0x080c14, 1); g.fillCircle(cx, cy, 3);
+    g.lineStyle(1, col, 0.6); g.lineBetween(cx - 8, cy - 4, cx - 5, cy - 1); g.lineBetween(cx + 8, cy - 4, cx + 5, cy - 1);
+  },
+  // Fuel Skimming — flame with droplet
+  'Fuel Skimming':       (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx, cy - 8, cx - 5, cy + 2, cx + 5, cy + 2);
+    g.fillStyle(col, 0.5); g.fillTriangle(cx, cy - 3, cx - 3, cy + 5, cx + 3, cy + 5);
+    g.fillStyle(col, 1); g.fillCircle(cx, cy + 7, 3);
+    g.fillStyle(0x080c14, 0.5); g.fillCircle(cx, cy + 7, 1.5);
+  },
+  // Fleet Resupply — supply arrow to ship
+  'Fleet Resupply':      (g, cx, cy, col) => {
+    g.fillStyle(col, 0.6); g.fillTriangle(cx + 2, cy - 7, cx - 2, cy + 3, cx + 6, cy + 3);
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx - 8, cy + 1, cx - 4, cy - 4, cx - 4, cy + 6);
+    g.lineStyle(2, col, 0.8); g.lineBetween(cx - 4, cy + 1, cx + 2, cy + 1);
+  },
+
+  // ── Defense perks ────────────────────────────────────────────────────────
+  // Flak Batteries — burst pattern
+  'Flak Batteries':      (g, cx, cy, col) => {
+    g.fillStyle(col, 1); g.fillCircle(cx, cy, 3);
+    g.lineStyle(2, col, 0.8);
+    for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; g.lineBetween(cx + Math.cos(a) * 4, cy + Math.sin(a) * 4, cx + Math.cos(a) * 9, cy + Math.sin(a) * 9); }
+  },
+  // Reinforced Bunkers — thick walled square
+  'Reinforced Bunkers':  (g, cx, cy, col) => {
+    g.fillStyle(col, 1); g.fillRect(cx - 8, cy - 8, 16, 16);
+    g.fillStyle(0x080c14, 1); g.fillRect(cx - 5, cy - 5, 10, 10);
+    g.fillStyle(col, 0.6); g.fillRect(cx - 3, cy - 3, 6, 6);
+  },
+  // Missile Screen — incoming missile with X
+  'Missile Screen':      (g, cx, cy, col) => {
+    g.fillStyle(col, 1); g.fillTriangle(cx - 8, cy, cx - 2, cy - 3, cx - 2, cy + 3);
+    g.lineStyle(2, col, 1); g.lineBetween(cx + 1, cy - 7, cx + 8, cy + 7);
+    g.lineStyle(2.5, col, 1);
+    g.lineBetween(cx - 1, cy - 5, cx + 6, cy + 4);
+    g.lineBetween(cx + 6, cy - 5, cx - 1, cy + 4);
+  },
+  // Shield Grid — hex lattice
+  'Shield Grid':         (g, cx, cy, col) => {
+    g.lineStyle(1.5, col, 0.9);
+    const pts = []; for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 - Math.PI / 6; pts.push({ x: cx + Math.cos(a) * 9, y: cy + Math.sin(a) * 9 }); }
+    g.strokePoints(pts, true);
+    g.lineStyle(1, col, 0.4); for (const p of pts) g.lineBetween(cx, cy, p.x, p.y);
+    g.fillStyle(col, 0.8); g.fillCircle(cx, cy, 2);
+  },
+  // Planetary Cannon — gun barrel pointing out
+  'Planetary Cannon':    (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillRect(cx - 2, cy - 9, 4, 10);
+    g.fillRect(cx - 6, cy - 2, 12, 5);
+    g.fillStyle(col, 0.5); g.fillCircle(cx, cy + 6, 4);
+    g.fillStyle(col, 1); g.fillCircle(cx, cy + 6, 2);
+  },
+  // Fortress World — planet with shield band
+  'Fortress World':      (g, cx, cy, col) => {
+    g.fillStyle(col, 0.2); g.fillCircle(cx, cy, 8);
+    g.lineStyle(2, col, 0.9); g.strokeCircle(cx, cy, 8);
+    g.lineStyle(2.5, col, 1); g.strokeEllipse(cx, cy, 22, 8);
+  },
+  // Point Defence Net — interconnected small shields
+  'Point Defence Net':   (g, cx, cy, col) => {
+    g.lineStyle(1, col, 0.5); g.strokeCircle(cx, cy, 9);
+    g.fillStyle(col, 1);
+    const pts2 = [[cx, cy-9],[cx-8,cy+5],[cx+8,cy+5]];
+    for (const [px, py] of pts2) { g.fillTriangle(px, py-4, px-3, py+2, px+3, py+2); }
+    g.lineStyle(1, col, 0.4);
+    g.lineBetween(pts2[0][0], pts2[0][1], pts2[1][0], pts2[1][1]);
+    g.lineBetween(pts2[1][0], pts2[1][1], pts2[2][0], pts2[2][1]);
+    g.lineBetween(pts2[0][0], pts2[0][1], pts2[2][0], pts2[2][1]);
+  },
+  // Counter Battery — two cannons facing each other
+  'Counter Battery':     (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillRect(cx - 9, cy - 3, 7, 4);
+    g.fillRect(cx + 2, cy - 3, 7, 4);
+    g.fillCircle(cx - 7, cy + 3, 3); g.fillCircle(cx + 7, cy + 3, 3);
+    g.lineStyle(1.5, col, 0.6); g.lineBetween(cx, cy - 1, cx, cy + 6);
+  },
+  // Hardened Silos — silo with armour tick
+  'Hardened Silos':      (g, cx, cy, col) => {
+    g.fillStyle(col, 1);
+    g.fillRect(cx - 5, cy - 6, 10, 14);
+    g.fillEllipse(cx, cy - 6, 10, 5);
+    g.fillStyle(0x080c14, 1); g.fillRect(cx - 3, cy, 6, 8);
+    g.lineStyle(2, col, 1); g.lineBetween(cx - 4, cy + 4, cx - 1, cy + 8); g.lineBetween(cx - 1, cy + 8, cx + 5, cy + 0);
+  },
+  // Evacuation Drill — arrow departing from circle
+  'Evacuation Drill':    (g, cx, cy, col) => {
+    g.lineStyle(1.5, col, 0.7); g.strokeCircle(cx - 3, cy + 1, 6);
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx + 8, cy - 4, cx + 3, cy - 7, cx + 8, cy - 1);
+    g.lineStyle(2, col, 1); g.lineBetween(cx + 1, cy - 4, cx + 7, cy - 4);
+  },
+};
+
+
 // Each tree has a `pool` of 10 perks. 6 are randomly selected each game.
 // All have tested:false → red ✕ badge shown.
 // Tier is assigned based on position within the chosen 6 (pairs 1/2/3 = tier 1/2/3).
@@ -75,16 +541,16 @@ const TREE_DEFS = [
     root: { id: 'fighter_root', name: 'Fighter Corps',
             desc: 'Base fighter doctrine — standard scramble protocols, no special rules.', tested: true },
     pool: [
-      { id: 'f_01', name: 'Rapid Scramble',   desc: 'Fighters launch 30% faster from Naval Bases.' },
-      { id: 'f_02', name: 'Dense Formation',  desc: 'Fighters gain +1 attack when stacked 5 or more.' },
-      { id: 'f_03', name: 'Afterburner',      desc: 'Fighter movement speed increased by 25%.' },
-      { id: 'f_04', name: 'Wingman Protocol', desc: 'Each fighter has a 20% chance to dodge one hit per battle.' },
-      { id: 'f_05', name: 'Ace Pilots',       desc: 'Fighters deal double damage against destroyers.' },
-      { id: 'f_06', name: 'Swarm Tactics',    desc: 'Fighter production rate from Naval Bases doubled.' },
-      { id: 'f_07', name: 'Interceptor Role', desc: 'Fighters always strike first against incoming missiles.' },
-      { id: 'f_08', name: 'Fuel Efficiency',  desc: 'Fighters cost 50% less fuel to produce.' },
-      { id: 'f_09', name: 'Air Superiority',  desc: 'Fighters gain +1 attack per adjacent friendly planet.' },
-      { id: 'f_10', name: 'Kamikaze Protocol',desc: 'Fighters destroyed in combat deal 1 damage to the attacker.' },
+      { id: 'f_01', name: 'Rapid Scramble',     icon: PERK_ICONS['Rapid Scramble'],     desc: 'Fighters launch 30% faster from Naval Bases.' },
+      { id: 'f_02', name: 'Dense Formation',    icon: PERK_ICONS['Dense Formation'],    desc: 'Each Fighter gains +1 attack when stacked 5 or more.' },
+      { id: 'f_03', name: 'Afterburner',        icon: PERK_ICONS['Afterburner'],        desc: 'Each Fighter increases stack movement speed by 2.5%.' },
+      { id: 'f_04', name: 'Wingman Protocol',   icon: PERK_ICONS['Wingman Protocol'],   desc: 'Each Fighter has a 10% chance to dodge one hit per Main Strike phase.' },
+      { id: 'f_05', name: 'Ace Pilots',         icon: PERK_ICONS['Ace Pilots'],         desc: 'Each Fighter deals double damage against Destroyers.' },
+      { id: 'f_06', name: 'Swarm Tactics',      icon: PERK_ICONS['Swarm Tactics'],      desc: 'Each Fighter gains +1 attack when in a stack of only Fighters.' },
+      { id: 'f_07', name: 'Interceptor Role',   icon: PERK_ICONS['Interceptor Role'],   desc: 'Each Fighter destroyed by Pre-Strike abilities deals its damage back to the attacker in the Pre-Strike Resolution phase.' },
+      { id: 'f_08', name: 'First Strike',       icon: PERK_ICONS['First Strike'],       desc: 'Each Fighter gains a Pre-Strike of 1 damage.' },
+      { id: 'f_09', name: 'Air Superiority',    icon: PERK_ICONS['Air Superiority'],    desc: 'Stack of Fighters gains +1 attack per adjacent friendly planet.' },
+      { id: 'f_10', name: 'Kamikaze Protocol',  icon: PERK_ICONS['Kamikaze Protocol'],  desc: 'Each Fighter destroyed in combat has a 50% chance to deal its damage to the attacker in the Main Strike Resolution phase.' },
     ],
   },
   {
@@ -94,16 +560,16 @@ const TREE_DEFS = [
     root: { id: 'destroyer_root', name: 'Destroyer Wing',
             desc: 'Base destroyer doctrine — pre-strike kills 2 enemy fighters before combat.', tested: true },
     pool: [
-      { id: 'd_01', name: 'Precision Strike',  desc: 'Pre-strike kills 3 targets instead of 2.' },
-      { id: 'd_02', name: 'Reinforced Hull',   desc: 'Destroyers require 2 damage to destroy.' },
-      { id: 'd_03', name: 'EMP Warhead',       desc: 'Pre-strike stuns one enemy cruiser, preventing its repair roll.' },
-      { id: 'd_04', name: 'Hunter Protocol',   desc: 'Destroyers deal +2 attack against flagships.' },
-      { id: 'd_05', name: 'Torpedo Spread',    desc: 'Destroyers fire two pre-strikes per battle.' },
-      { id: 'd_06', name: 'Ambush Doctrine',   desc: 'Destroyers deal +2 attack when their stack is outnumbered.' },
-      { id: 'd_07', name: 'Stealth Approach',  desc: 'Destroyer stacks do not trigger combat alerts when adjacent.' },
-      { id: 'd_08', name: 'Long Range Guns',   desc: 'Destroyer pre-strike resolves before dreadnaught attacks.' },
-      { id: 'd_09', name: 'Wolfpack',          desc: 'Each additional destroyer in a stack adds +0.5 attack (rounded).' },
-      { id: 'd_10', name: 'Hit and Run',       desc: 'Destroyers may retreat after pre-strike without main combat.' },
+      { id: 'd_01', name: 'Improved Barrage',  icon: PERK_ICONS['Improved Barrage'],  desc: 'Pre-strike kills 3 Fighters instead of 2.' },
+      { id: 'd_02', name: 'Reinforced Hull',   icon: PERK_ICONS['Reinforced Hull'],   desc: 'Each Destroyer gains +10 HP.' },
+      { id: 'd_03', name: 'Rapid Scramble',    icon: PERK_ICONS['Rapid Scramble'],    desc: 'Destroyers launch 30% faster from Destroyer Factories.' },
+      { id: 'd_04', name: 'Hunter Protocol',   icon: PERK_ICONS['Hunter Protocol'],   desc: 'Each Destroyer deals +2 damage against Dreadnaughts and Flagships.' },
+      { id: 'd_05', name: 'Torpedo Spread',    icon: PERK_ICONS['Torpedo Spread'],    desc: 'Each Destroyer Pre-Strike can hit non-Fighter ships for 15 damage.' },
+      { id: 'd_06', name: 'Last Stand',        icon: PERK_ICONS['Last Stand'],        desc: 'Each Destroyer deals +2 damage when their stack is outnumbered.' },
+      { id: 'd_07', name: 'Ace Pilots',        icon: PERK_ICONS['Ace Pilots'],        desc: 'Each Destroyer deals double damage against other Destroyers.' },
+      { id: 'd_08', name: 'Dense Formation',   icon: PERK_ICONS['Dense Formation'],   desc: 'Each Destroyer gains +1 attack when stacked 5 or more.' },
+      { id: 'd_09', name: 'Wingman Protocol',  icon: PERK_ICONS['Wingman Protocol'],  desc: 'Each Destroyer has a 10% chance to dodge one hit per Main Strike phase.' },
+      { id: 'd_10', name: 'Hit and Run',       icon: PERK_ICONS['Hit and Run'],       desc: 'Destroyers may retreat after Pre-Strike without entering Main Strike.' },
     ],
   },
   {
@@ -113,16 +579,16 @@ const TREE_DEFS = [
     root: { id: 'cruiser_root', name: 'Cruiser Fleet',
             desc: 'Base cruiser doctrine — 50% repair chance on destruction.', tested: true },
     pool: [
-      { id: 'c_01', name: 'Field Medics',       desc: 'Cruiser repair chance increases from 50% to 65%.' },
-      { id: 'c_02', name: 'Heavy Armour',       desc: 'Cruisers require 2 damage to destroy.' },
-      { id: 'c_03', name: 'Nanite Repair',      desc: 'Repaired cruisers return at full health.' },
-      { id: 'c_04', name: 'Escort Formation',   desc: 'Cruisers absorb one hit directed at the flagship per battle.' },
-      { id: 'c_05', name: 'Regeneration Field', desc: 'All friendly ships in the stack gain +1 health.' },
-      { id: 'c_06', name: 'Battle Hardened',    desc: 'Each time a cruiser repairs, it permanently gains +1 attack.' },
-      { id: 'c_07', name: 'Combat Medic',       desc: 'Cruisers can repair one other ship type (not just themselves) per battle.' },
-      { id: 'c_08', name: 'Rapid Response',     desc: 'Cruiser production time reduced by 20%.' },
-      { id: 'c_09', name: 'Shielded Core',      desc: 'Cruisers take -1 damage from pre-strikes.' },
-      { id: 'c_10', name: 'Last Stand',         desc: 'The final cruiser in a stack has a 100% repair chance.' },
+      { id: 'c_01', name: 'Field Medics',       icon: PERK_ICONS['Field Medics'],       desc: 'Cruiser repair chance increases from 50% to 65%.' },
+      { id: 'c_02', name: 'Reinforced Hull',    icon: PERK_ICONS['Reinforced Hull'],    desc: 'Each Cruiser gains +10 HP.' },
+      { id: 'c_03', name: 'Nanite Repair',      icon: PERK_ICONS['Nanite Repair'],      desc: 'Repaired Cruisers return at full health.' },
+      { id: 'c_04', name: 'Escort Formation',   icon: PERK_ICONS['Escort Formation'],   desc: 'Each Cruiser absorbs one hit directed at the Flagship per Main Strike round.' },
+      { id: 'c_05', name: 'Regeneration Field', icon: PERK_ICONS['Regeneration Field'], desc: 'Each friendly ship in a stack with a Cruiser gains +5 HP.' },
+      { id: 'c_06', name: 'Hunter Protocol',    icon: PERK_ICONS['Hunter Protocol'],    desc: 'Each Cruiser deals +5 damage against Dreadnaughts and Flagships.' },
+      { id: 'c_07', name: 'Ace Pilots',         icon: PERK_ICONS['Ace Pilots'],         desc: 'Each Cruiser deals double damage against Destroyers.' },
+      { id: 'c_08', name: 'Rapid Scramble',     icon: PERK_ICONS['Rapid Scramble'],     desc: 'Cruisers launch 30% faster from Cruiser Factories.' },
+      { id: 'c_09', name: 'Shielded Core',      icon: PERK_ICONS['Shielded Core'],      desc: 'Each Cruiser takes −10 damage from Pre-Strike attacks.' },
+      { id: 'c_10', name: 'Last Stand',         icon: PERK_ICONS['Last Stand'],         desc: 'Each Cruiser deals +2 damage when their stack is outnumbered.' },
     ],
   },
   {
@@ -130,18 +596,18 @@ const TREE_DEFS = [
     color: 0xff8844, hex: '#ff8844',
     icon: SHIP_ICONS.dreadnaught,
     root: { id: 'dreadnaught_root', name: 'Dreadnaught Armada',
-            desc: 'Base capital doctrine — 4 attack, 4 health, counts as 4 units.', tested: true },
+            desc: 'Base capital doctrine — 20 damage × 2 attacks, 50 HP.', tested: true },
     pool: [
-      { id: 'dr_01', name: 'Siege Cannons',    desc: 'Dreadnaught attack increases to 5.' },
-      { id: 'dr_02', name: 'Titan Plating',    desc: 'Dreadnaught health increases to 6.' },
-      { id: 'dr_03', name: 'Orbital Strike',   desc: 'Dreadnaught deals 1 splash damage to all enemies, resolved after main combat.' },
-      { id: 'dr_04', name: 'Point Defence',    desc: 'Each dreadnaught intercepts one incoming missile per battle.' },
-      { id: 'dr_05', name: 'Mass Driver',      desc: 'When a dreadnaught is alone in a stack, its attack counts as 8.' },
-      { id: 'dr_06', name: 'Citadel Hull',     desc: 'Dreadnaught requires 8 damage to destroy instead of 4.' },
-      { id: 'dr_07', name: 'Suppression Fire', desc: 'Dreadnaught attack reduces enemy stack movement speed by 20% for 5 seconds.' },
-      { id: 'dr_08', name: 'Terror',           desc: 'Enemy stacks at adjacent nodes lose 1 unit per 10 seconds while a dreadnaught is present.' },
-      { id: 'dr_09', name: 'Slow Reload',      desc: 'Dreadnaught attacks last — but deals double damage on its turn.' },
-      { id: 'dr_10', name: 'Living Fortress',  desc: 'A dreadnaught on a planet gives it +2 defense against captures.' },
+      { id: 'dr_01', name: 'Siege Cannons',   icon: PERK_ICONS['Siege Cannons'],   desc: 'Each Dreadnaught\'s attack increases by +5 damage.' },
+      { id: 'dr_02', name: 'Reinforced Hull', icon: PERK_ICONS['Reinforced Hull'], desc: 'Each Dreadnaught gains +15 HP.' },
+      { id: 'dr_03', name: 'Orbital Strike',  icon: PERK_ICONS['Orbital Strike'],  desc: 'Dreadnaught stacks deal 5 Pre-Strike damage to all enemies.' },
+      { id: 'dr_04', name: 'Afterburner',     icon: PERK_ICONS['Afterburner'],     desc: 'Each Dreadnaught increases stack movement speed by 10%.' },
+      { id: 'dr_05', name: 'Mass Driver',     icon: PERK_ICONS['Mass Driver'],     desc: 'When a Dreadnaught is alone in a stack, its attacks count as 30 damage × 3.' },
+      { id: 'dr_06', name: 'Wingman Protocol',icon: PERK_ICONS['Wingman Protocol'],desc: 'Each Dreadnaught has a 10% chance to dodge one hit per Main Strike phase.' },
+      { id: 'dr_07', name: 'Last Stand',      icon: PERK_ICONS['Last Stand'],      desc: 'Each Dreadnaught deals +5 damage when their stack is outnumbered.' },
+      { id: 'dr_08', name: 'Rapid Scramble',  icon: PERK_ICONS['Rapid Scramble'],  desc: 'Dreadnaughts launch 30% faster from Dreadnaught Factories.' },
+      { id: 'dr_09', name: 'First Strike',    icon: PERK_ICONS['First Strike'],    desc: 'Each Dreadnaught gains a Pre-Strike of 3 damage.' },
+      { id: 'dr_10', name: 'Living Fortress', icon: PERK_ICONS['Living Fortress'], desc: 'Each Dreadnaught defending a planet gains +20 HP.' },
     ],
   },
   {
@@ -151,16 +617,16 @@ const TREE_DEFS = [
     root: { id: 'flagship_root', name: 'Command Ship',
             desc: 'Command protocols — flagship is the last unit destroyed; losing it ends the game.', tested: true },
     pool: [
-      { id: 'fl_01', name: 'Command Aura',     desc: 'All ships in the flagship\'s stack gain +1 attack.' },
-      { id: 'fl_02', name: 'Emergency Shield', desc: 'Flagship survives one lethal hit per battle.' },
-      { id: 'fl_03', name: 'Rally Beacon',     desc: 'Friendly stacks at adjacent nodes gain +1 attack for 10 seconds after flagship arrives.' },
-      { id: 'fl_04', name: 'Adaptive Armour',  desc: 'Flagship gains +1 health for every 3 battles survived.' },
-      { id: 'fl_05', name: 'Fleet Admiral',    desc: 'All friendly units deal +1 damage while the flagship is alive and on the map.' },
-      { id: 'fl_06', name: 'Undying Will',     desc: 'Flagship can be rebuilt once per game if destroyed (costs 300/300/300).' },
-      { id: 'fl_07', name: 'Iron Reserve',     desc: 'Flagship generates +5 of each resource per tick.' },
-      { id: 'fl_08', name: 'Tactical Retreat', desc: 'Flagship can disengage from combat before resolution once per battle.' },
-      { id: 'fl_09', name: 'Inspiring Presence',desc: 'Cruiser repair chance increases to 65% when flagship is in the same stack.' },
-      { id: 'fl_10', name: 'Spearhead',        desc: 'Flagship stack moves 50% faster when ordered to attack an enemy node.' },
+      { id: 'fl_01', name: 'Command Aura',      icon: PERK_ICONS['Command Aura'],      desc: 'All ships in the Flagship\'s stack gain +1 attack.' },
+      { id: 'fl_02', name: 'Emergency Shield',  icon: PERK_ICONS['Emergency Shield'],  desc: 'Flagship survives one lethal hit per battle.' },
+      { id: 'fl_03', name: 'Rally Beacon',      icon: PERK_ICONS['Rally Beacon'],      desc: 'Stacks containing a Flagship have movement speed increased by 50%.' },
+      { id: 'fl_04', name: 'Reinforced Hull',   icon: PERK_ICONS['Reinforced Hull'],   desc: 'Each Flagship gains +50 HP.' },
+      { id: 'fl_05', name: 'Last Stand',        icon: PERK_ICONS['Last Stand'],        desc: 'Each Flagship deals +10 damage and attacks 1 additional time when their stack is outnumbered.' },
+      { id: 'fl_06', name: 'First Strike',      icon: PERK_ICONS['First Strike'],      desc: 'Each Flagship gains a Pre-Strike of 20 damage.' },
+      { id: 'fl_07', name: 'Iron Reserve',      icon: PERK_ICONS['Iron Reserve'],      desc: 'Each Flagship generates +5 Food, Metal, and Fuel per resource tick.' },
+      { id: 'fl_08', name: 'Hunter Protocol',   icon: PERK_ICONS['Hunter Protocol'],   desc: 'Each Flagship deals +15 damage against Dreadnaughts and Flagships.' },
+      { id: 'fl_09', name: 'Naval Construction',icon: PERK_ICONS['Naval Construction'],desc: 'Each Flagship produces 1 Fighter every 30 seconds.' },
+      { id: 'fl_10', name: 'Spearhead',         icon: PERK_ICONS['Spearhead'],         desc: 'Each Flagship gains a Pre-Strike of 10 damage directed at an enemy Flagship, or a random ship if no enemy Flagship is present.' },
     ],
   },
   {
@@ -170,16 +636,16 @@ const TREE_DEFS = [
     root: { id: 'econ_buildings_root', name: 'Basic Infrastructure',
             desc: 'Standard economic building slate — Farms, Extractors, and Mines available.', tested: true },
     pool: [
-      { id: 'eb_01', name: 'Advanced Farming',    desc: 'Farms produce +2 food per tick instead of +1.' },
-      { id: 'eb_02', name: 'Efficient Smelting',  desc: 'Metal Extractors produce +2 metal per tick.' },
-      { id: 'eb_03', name: 'Fusion Tap',          desc: 'Fuel Extractors produce +2 fuel per tick.' },
-      { id: 'eb_04', name: 'Supply Network',      desc: 'Resource buildings on adjacent player-owned planets each share +1 yield with neighbours.' },
-      { id: 'eb_05', name: 'Megaplex',            desc: 'All resource buildings on a fully developed planet produce triple yield.' },
-      { id: 'eb_06', name: 'Automated Logistics', desc: 'Resource tick fires every 2 seconds instead of 3.' },
-      { id: 'eb_07', name: 'Deep Excavation',     desc: 'Each planet\'s base resource values increase by 1 across all types.' },
-      { id: 'eb_08', name: 'Bunker Economy',      desc: 'Resource buildings are not destroyed by meteor impact.' },
-      { id: 'eb_09', name: 'Trade Routes',        desc: 'Owning 3+ planets generates a bonus +5 of each resource per tick.' },
-      { id: 'eb_10', name: 'Stockpile',           desc: 'Resource cap increased — resources can accumulate up to 9999 instead of 999.' },
+      { id: 'eb_01', name: 'Advanced Farming',   icon: PERK_ICONS['Advanced Farming'],   desc: 'Farms produce +2 Food per tick instead of +1.' },
+      { id: 'eb_02', name: 'Efficient Smelting', icon: PERK_ICONS['Efficient Smelting'], desc: 'Metal Extractors produce +2 Metal per tick.' },
+      { id: 'eb_03', name: 'Fusion Tap',         icon: PERK_ICONS['Fusion Tap'],         desc: 'Fuel Extractors produce +2 Fuel per tick.' },
+      { id: 'eb_04', name: 'Supply Network',     icon: PERK_ICONS['Supply Network'],     desc: 'Resource buildings on adjacent player-owned planets each share +1 yield with neighbours.' },
+      { id: 'eb_05', name: 'Megaplex',           icon: PERK_ICONS['Megaplex'],           desc: 'All resource buildings on a fully developed planet produce triple yield.' },
+      { id: 'eb_06', name: 'Balanced Logistics', icon: PERK_ICONS['Balanced Logistics'], desc: 'Planets gain +1 production of their least produced resource per tick, excluding ties.' },
+      { id: 'eb_07', name: 'Deep Excavation',    icon: PERK_ICONS['Deep Excavation'],    desc: 'Each Barren planet increases base resource values by 1 for Food, Metal, and Fuel.' },
+      { id: 'eb_08', name: 'Bunker Economy',     icon: PERK_ICONS['Bunker Economy'],     desc: 'Resource buildings cannot be destroyed by meteor impact.' },
+      { id: 'eb_09', name: 'Trade Routes',       icon: PERK_ICONS['Trade Routes'],       desc: 'All stack movement between adjacent player-owned planets is increased by 20%.' },
+      { id: 'eb_10', name: 'Enriched Mining',    icon: PERK_ICONS['Enriched Mining'],    desc: 'Asteroid Miners yield 20% more resources per trip.' },
     ],
   },
   {
@@ -189,16 +655,16 @@ const TREE_DEFS = [
     root: { id: 'econ_ships_root', name: 'Mining Doctrine',
             desc: 'Asteroid mining operations — Asteroid Miner unit available.', tested: true },
     pool: [
-      { id: 'es_01', name: 'Improved Drills',    desc: 'Mining time reduced from 4s to 2.5s.' },
-      { id: 'es_02', name: 'Cargo Hold Mk II',   desc: 'Miners carry 50% more resources per trip.' },
-      { id: 'es_03', name: 'Extended Range',     desc: 'Miner patrol radius increases from 160px to 240px.' },
-      { id: 'es_04', name: 'Dual Miner Bays',    desc: 'Asteroid Mine buildings deploy 2 miners instead of 1.' },
-      { id: 'es_05', name: 'Rich Vein Scanner',  desc: 'Miners detect rich asteroids from twice the normal range.' },
-      { id: 'es_06', name: 'Deep Core Mining',   desc: 'All asteroid resource yields doubled.' },
-      { id: 'es_07', name: 'Meteor Harvesting',  desc: 'Miners that intercept meteors gain a 50% resource bonus on the yield.' },
-      { id: 'es_08', name: 'Scout Drones',       desc: 'Asteroid Miners reveal the contents of nearby asteroids before flying out.' },
-      { id: 'es_09', name: 'Fuel Skimming',      desc: 'Each asteroid mined generates +5 bonus fuel regardless of asteroid type.' },
-      { id: 'es_10', name: 'Fleet Resupply',     desc: 'Depositing a full cargo load generates +2 of each resource for every friendly ship at the home planet.' },
+      { id: 'es_01', name: 'Improved Drills',   icon: PERK_ICONS['Improved Drills'],   desc: 'Mining time reduced from 4s to 2.5s.' },
+      { id: 'es_02', name: 'Cargo Hold Mk II',  icon: PERK_ICONS['Cargo Hold Mk II'],  desc: 'Miners carry 50% more resources per trip.' },
+      { id: 'es_03', name: 'Extended Range',    icon: PERK_ICONS['Extended Range'],    desc: 'Miner patrol radius increases from 160px to 240px.' },
+      { id: 'es_04', name: 'Dual Miner Bays',   icon: PERK_ICONS['Dual Miner Bays'],   desc: 'Asteroid Mine buildings deploy 2 miners instead of 1.' },
+      { id: 'es_05', name: 'Rich Vein Scanner', icon: PERK_ICONS['Rich Vein Scanner'], desc: 'Miners detect Rich Asteroids from twice the normal range.' },
+      { id: 'es_06', name: 'Deep Core Mining',  icon: PERK_ICONS['Deep Core Mining'],  desc: 'All asteroid resource yields are doubled.' },
+      { id: 'es_07', name: 'Meteor Harvesting', icon: PERK_ICONS['Meteor Harvesting'], desc: 'Miners that intercept meteors gain a 50% resource bonus on the yield.' },
+      { id: 'es_08', name: 'Scout Drones',      icon: PERK_ICONS['Scout Drones'],      desc: 'Asteroid Miners reveal the contents of nearby asteroids before flying out.' },
+      { id: 'es_09', name: 'Fuel Skimming',     icon: PERK_ICONS['Fuel Skimming'],     desc: 'Each asteroid mined generates +5 bonus Fuel regardless of asteroid type.' },
+      { id: 'es_10', name: 'Fleet Resupply',    icon: PERK_ICONS['Fleet Resupply'],    desc: 'Depositing a full cargo load generates +2 of each resource for every friendly ship at the home planet.' },
     ],
   },
   {
@@ -208,16 +674,16 @@ const TREE_DEFS = [
     root: { id: 'defense_root', name: 'Planetary Shields',
             desc: 'Orbital defense basics — planets with defensive buildings resist meteor impact.', tested: true },
     pool: [
-      { id: 'de_01', name: 'Flak Batteries',     desc: 'Planetary defense buildings intercept meteors from 1.5× their normal range.' },
-      { id: 'de_02', name: 'Reinforced Bunkers', desc: 'Meteor impact damage reduced from 30% to 20% per unit.' },
-      { id: 'de_03', name: 'Missile Screen',     desc: 'Planetary defense automatically intercepts one incoming enemy missile per battle.' },
-      { id: 'de_04', name: 'Shield Grid',        desc: 'Defending units take -1 damage per attack when at a fortified planet.' },
-      { id: 'de_05', name: 'Planetary Cannon',   desc: 'Defense buildings deal 2 damage per 10 seconds to enemy stacks at adjacent nodes.' },
-      { id: 'de_06', name: 'Fortress World',     desc: 'A planet with a defense building cannot be captured while it is active and powered.' },
-      { id: 'de_07', name: 'Point Defence Net',  desc: 'Defense buildings protect all adjacent planets from meteor impact.' },
-      { id: 'de_08', name: 'Counter Battery',    desc: 'Defense buildings return fire on Missile Carrier attacks, dealing 1 damage to the source.' },
-      { id: 'de_09', name: 'Hardened Silos',     desc: 'Buildings on defended planets survive one meteor impact without being destroyed.' },
-      { id: 'de_10', name: 'Evacuation Drill',   desc: 'When a defended planet is attacked, 30% of units retreat to an adjacent friendly node automatically.' },
+      { id: 'de_01', name: 'Flak Batteries',    icon: PERK_ICONS['Flak Batteries'],    desc: 'Planetary defense buildings intercept meteors from 1.5× their normal range.' },
+      { id: 'de_02', name: 'Reinforced Bunkers',icon: PERK_ICONS['Reinforced Bunkers'],desc: 'Meteor impact damage reduced from 30% to 20% per unit.' },
+      { id: 'de_03', name: 'Missile Screen',    icon: PERK_ICONS['Missile Screen'],    desc: 'Planetary defense automatically intercepts one incoming enemy missile per battle.' },
+      { id: 'de_04', name: 'Shield Grid',       icon: PERK_ICONS['Shield Grid'],       desc: 'Defending units take −1 damage per attack when at a fortified planet.' },
+      { id: 'de_05', name: 'Planetary Cannon',  icon: PERK_ICONS['Planetary Cannon'],  desc: 'Defense buildings deal 2 damage per 10 seconds to enemy stacks at adjacent nodes.' },
+      { id: 'de_06', name: 'Fortress World',    icon: PERK_ICONS['Fortress World'],    desc: 'A planet with a defense building cannot be captured while it is active and powered.' },
+      { id: 'de_07', name: 'Point Defence Net', icon: PERK_ICONS['Point Defence Net'], desc: 'Defense buildings protect all adjacent planets from meteor impact.' },
+      { id: 'de_08', name: 'Counter Battery',   icon: PERK_ICONS['Counter Battery'],   desc: 'Defense buildings return fire on Missile Carrier attacks, dealing 1 damage to the source.' },
+      { id: 'de_09', name: 'Hardened Silos',    icon: PERK_ICONS['Hardened Silos'],    desc: 'Buildings on defended planets survive one meteor impact without being destroyed.' },
+      { id: 'de_10', name: 'Evacuation Drill',  icon: PERK_ICONS['Evacuation Drill'],  desc: 'When a defended planet is attacked, 30% of units retreat to an adjacent friendly node automatically.' },
     ],
   },
 ];
@@ -537,19 +1003,29 @@ export default class ResearchScene extends Phaser.Scene {
         g.fillRect(NX + 1, y + 5, 3, NODE_H - 10);
       }
 
-      // Root icon
+      // Root icon (tree icon, centred left)
       if (isRoot) {
         const ig = this.add.graphics().setDepth(92);
         tree.icon(ig, NX + 18, y + R(NODE_H / 2), tree.color);
         T.push(ig);
       }
 
+      // Perk icon — top-left of non-root node
+      if (!isRoot && node.icon) {
+        const ig = this.add.graphics().setDepth(92);
+        const iconCol = unlocked
+          ? Phaser.Display.Color.HexStringToColor(tree.hex).color
+          : canUnlock ? 0x4a6a80 : 0x1e3040;
+        node.icon(ig, NX + 14, y + R(NODE_H / 2) - 4, iconCol);
+        T.push(ig);
+      }
+
       // Name text — integer position, resolution 2 for crispness
-      const nameX  = R(isRoot ? NX + 36 : NX + 12);
+      const nameX  = R(isRoot ? NX + 36 : NX + 30);
       const nameCol = unlocked ? tree.hex : canUnlock ? '#aaccdd' : '#2d4055';
       const nameTxt = this._makeTxt(nameX, y + 10, node.name,
         unlocked ? 'bold 11px monospace' : '11px monospace', nameCol, 92);
-      nameTxt.setWordWrapWidth(NODE_W - (isRoot ? 48 : 28));
+      nameTxt.setWordWrapWidth(NODE_W - (isRoot ? 48 : 44));
       T.push(nameTxt);
 
       // Status / cost line
