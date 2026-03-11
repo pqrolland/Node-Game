@@ -140,7 +140,10 @@ export default class TooltipScene extends Phaser.Scene {
     });
     this._container.add(this._descText);
 
-    this.game.events.on('showTooltip', ({ key, x, y }) => this._show(key, x, y));
+    this.game.events.on('showTooltip', ({ key, x, y }) => {
+      this.scene.bringToTop(); // always render above every other scene
+      this._show(key, x, y);
+    });
     this.game.events.on('hideTooltip', () => this._hide());
   }
 

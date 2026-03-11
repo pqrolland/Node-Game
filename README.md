@@ -61,7 +61,7 @@ Each stack holds a **composition** of multiple ship types. The badge on the stac
 | Ship | HP | Damage | Attacks/Round | Special |
 |---|---|---|---|---|
 | Fighter | 10 | 5 | 1 | Basic unit — produced every 15s |
-| Destroyer | 20 | 10 | 1 | Durable all-rounder |
+| Destroyer | 20 | 10 | 1 | **Anti-Fighter Barrage** — fires 2 shots at distinct fighters each round before main combat (Pre-Strike phase) |
 | Cruiser | 20 | 10 | 2 | Fires twice per round; **50% repair on death** |
 | Dreadnaught | 50 | 20 | 2 | Heavily armoured capital ship |
 | Flagship | 60 | 20 | 2 | One per player — **loss = instant defeat** |
@@ -72,19 +72,26 @@ Hover any ship name in the **Unit Management panel** or **Build Modal** to see a
 
 Combat is **round-based**. When a hostile stack arrives at an occupied node, both sides lock in place and fight until one is destroyed. Rounds fire every **30 seconds**.
 
-**Each round:**
-1. Every living ship generates attack instances equal to its *attacks/round* stat
-2. Each attack instance picks a **random enemy ship** and deals its damage directly to that ship's HP
-3. Ships that reach 0 HP are removed; cruisers have a **50% chance to repair** and rejoin at full HP
-4. Health bars and unit counts update on the map overlay and in the Combat Window
+**Each round has four phases, resolved in order:**
+
+| Phase | What happens |
+|---|---|
+| **1 — Pre-Strike** | Each destroyer fires 2 Anti-Fighter Barrage shots at distinct enemy fighters (10 dmg each, one-shots a fighter). Both sides stage simultaneously — neither side's kills affect the other's shot count. |
+| **2 — Pre-Strike Resolution** | Barrage damage applied, dead fighters pruned. No cruiser repair here. |
+| **3 — Main Strike** | All surviving ships generate attack queue entries (one per *attacks/round*). Both sides' damage is staged simultaneously — doomed ships are excluded from further targeting so no damage is ever wasted on already-dead ships. |
+| **4 — Main Strike Resolution** | Damage applied, dead ships pruned. **Cruiser repair** rolls here only: each dead cruiser has a 50% chance to respawn at full HP. Survivors are fully healed when the battle ends. |
+
+**Anti-Fighter Barrage** fires every round as long as destroyers are alive. It only targets fighters — if no fighters are present, it does nothing.
+
+**Battle log** — the Combat Window's right panel shows a running log of every phase action, colour-coded by phase (purple = Pre-Strike, teal = Main Strike / Repair). Each entry shows the phase name inline (e.g. `Atk [Pre-Strike]: 2 destroyer(s) → 4 fighter(s) destroyed`).
 
 **Combat overlay** — while a battle is active, the two combat pill badges above the node replace the normal unit badges. The top pill shows the attacker (team colour + ship icon + count), the bottom shows the defender. A colour-coded arc ring counts down to the next round: green → yellow → red.
 
-**Combat Window** — click either pill to open a detailed popup showing each ship type's remaining HP bar, total HP, and a live countdown to the next round. The window updates after every round and closes automatically when the battle ends.
+**Combat Window** — click either pill to open a detailed popup showing each ship type's remaining HP bar, total HP, a live countdown to the next round, and the full battle log. The window updates after every round and closes automatically when the battle ends.
 
 **Reinforcements** — sending additional friendly units to a node mid-battle seamlessly adds them to the combatant's next round. The battle is never interrupted.
 
-**Battle end** — the losing stack is destroyed. The winner's badge and free movement are restored immediately. Mutual destruction is possible.
+**Battle end** — the losing stack is destroyed. The winning stack is fully healed. Mutual destruction is possible.
 
 Friendly stacks arriving at the **same node** as an idle friendly stack **merge** compositions.
 
@@ -233,11 +240,9 @@ Two pill badges replace the normal unit badge above the battle node:
 - Clicking either pill opens the **Combat Window**
 
 ### Combat Window *(click the combat overlay to open)*
-Floating popup centred on screen showing both sides in two columns:
-- Each ship type listed with icon, count, and a colour-coded HP bar
-- HP bar shifts from ship colour → orange → red as HP depletes
-- `current / max` HP label per ship type
-- Live countdown bar + "Next round in Xs" label, updates every frame
+Floating popup centred on screen, split into two panels:
+- **Left — HP panel:** two columns (attacker | defender), each ship type listed with icon, count, and a colour-coded HP bar. HP bar shifts from ship colour → orange → red as HP depletes. `current / max` HP label per ship type. Live countdown bar + "Next round in Xs" label, updates every frame.
+- **Right — Battle Log:** running log of every phase action grouped by round. Colour-coded: purple = Pre-Strike barrage, teal = Main Strike and Repair, dark red = repair failures. Each entry includes the phase name inline. Log auto-scrolls to the latest round; entry heights adapt to word-wrap.
 - Round counter in header · ✕ close button
 - Updates automatically after every round; closes when the battle resolves
 
