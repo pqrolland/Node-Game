@@ -2,6 +2,7 @@ import Unit, { emptyComposition, compositionTotal, dominantType } from '../units
 import AsteroidManager from '../asteroids/AsteroidManager.js';
 import { generateMapForPlayers, buildAdjacency, findPath } from '../map/MapGraph.js';
 import CombatManager from '../combat/CombatManager.js';
+import PerkManager from '../perks/PerkManager.js';
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -23,75 +24,29 @@ export default class GameScene extends Phaser.Scene {
   init(data) {
     // Receive config from MainMenuScene (or defaults for direct launch)
     this.playerCount = (data && data.playerCount) ? data.playerCount : 1;
+    this.testMode    = !!(data && data.testMode);
+
+    // Reset all mutable state so re-entering the scene is fully clean
+    this.selectedStack      = null;
+    this.nodeMap            = new Map();
+    this.adjacency          = null;
+    this.units              = [];
+    this.pendingSplitStack  = null;
+    this.nodePanelOpen      = false;
+    this.nodeOwnership      = new Map();
+    this.resources          = { food: 0, metal: 0, fuel: 0 };
+    this.resourceTickTimer  = 0;
+    this.unitProduction     = new Map();
   }
 
   create() {
-    // ── Generate map sized for player count ──────────────────────────────
-    const mapData = generateMapForPlayers(this.playerCount);
-    this._nodes   = mapData.nodes;
-    this._edges   = mapData.edges;
-    this._mapW    = mapData.mapW;
-    this._mapH    = mapData.mapH;
-
-    this._nodes.forEach(n => this.nodeMap.set(n.id, n));
-    this.adjacency = buildAdjacency(this._edges);
-
-    // Assign planet types
-    const PLANET_TYPES = ['molten', 'habitable', 'barren', 'sulfuric'];
-    this.nodeMap.forEach(node => {
-      node.type = PLANET_TYPES[Math.floor(Math.random() * PLANET_TYPES.length)];
-      node.baseFood  = node.food;
-      node.baseMetal = node.metal;
-      node.baseFuel  = node.fuel;
-    });
-
-    this.mapGfx       = this.add.graphics();
-    this.ownershipGfx = this.add.graphics().setDepth(4);
-    this.drawMap();
-
-    // ── Assign starting planets to each player ────────────────────────────
-    // Distribute start nodes evenly around the spiral for fairness.
-    // Each player gets 2 consecutive nodes. Neutral fills the rest.
-    const nodeIds    = Array.from(this.nodeMap.keys());
-    const totalNodes = nodeIds.length;  // 10 + playerCount*10
-    const usedNodes  = new Set();
-
-    // Helper: find a graph-adjacent neighbour of nodeA that isn't already used
-    const pickAdjacentNode = (nodeA) => {
-      const neighbours = this.adjacency.get(nodeA) || [];
-      // Prefer an unused neighbour
-      const free = neighbours.find(nid => !usedNodes.has(nid));
-      if (free) return free;
-      // Fallback: any neighbour (shouldn't normally happen)
-      return neighbours[0] || nodeIds.find(nid => !usedNodes.has(nid));
-    };
-
-    // Spread player start positions evenly around the spiral
-    for (let p = 0; p < this.playerCount; p++) {
-      const team   = p === 0 ? 'player' : `player${p + 1}`;
-      // Spread start indices evenly so players start far apart
-      let startI   = Math.round((p / this.playerCount) * totalNodes);
-      // Skip already-used nodes
-      while (usedNodes.has(nodeIds[startI % totalNodes])) startI++;
-      const nodeA  = nodeIds[startI % totalNodes];
-      // nodeB must be a graph neighbour of nodeA (guaranteed adjacent on the map)
-      const nodeB  = pickAdjacentNode(nodeA);
-
-      usedNodes.add(nodeA);
-      usedNodes.add(nodeB);
-
-      // Planet A: flagship + 10 fighters
-      this.spawnStack(nodeA, team, 0, { ...emptyComposition(), flagship: 1, fighter: 10 });
-      // Planet B: 10 fighters (always next-door on the graph)
-      this.spawnStack(nodeB, team, 0, { ...emptyComposition(), fighter: 10 });
+    console.log('[GameScene] create() called, testMode=', this.testMode);
+    // ── Map setup: normal game vs. test environment ───────────────────────
+    if (this.testMode) {
+      this._createTestMap();
+    } else {
+      this._createNormalMap();
     }
-
-    // Neutral faction: 10 fighters on every unclaimed planet
-    nodeIds.forEach(nid => {
-      if (!usedNodes.has(nid)) {
-        this.spawnStack(nid, 'neutral', 0, { ...emptyComposition(), fighter: 10 });
-      }
-    });
 
     // ── Asteroid manager ──────────────────────────────────────────────
     this.asteroidManager = new AsteroidManager(this, this._mapW, this._mapH, this.nodeMap);
@@ -144,13 +99,26 @@ export default class GameScene extends Phaser.Scene {
     // Escape deselects the current stack without opening the panel
     this.input.keyboard.on('keydown-ESC', () => this.deselectAll());
 
-    this.previewGfx = this.add.graphics().setDepth(5);
+    this.previewGfx    = this.add.graphics().setDepth(5);
+    this.perkManager   = new PerkManager(this);
     this.combatManager = new CombatManager(this);
     this.scene.launch('UIScene');
     this.scene.launch('NodePanel');
     this.scene.launch('TooltipScene');
     this.scene.launch('ResearchScene');
     this.scene.launch('CombatScene');
+
+    // ── Test-mode starting resources & RP ────────────────────────────────
+    if (this.testMode) {
+      this.resources.food  = 1000;
+      this.resources.metal = 1000;
+      this.resources.fuel  = 1000;
+      // Defer until UIScene/ResearchScene are ready to receive the event
+      this.time.delayedCall(200, () => {
+        this.game.events.emit('researchAddRP', 1000);
+        this.updateHUD();
+      });
+    }
 
     // Listen for split requests from NodePanel
     this.game.events.on('splitStack', this.handleSplit, this);
@@ -172,6 +140,123 @@ export default class GameScene extends Phaser.Scene {
     this.nodePanelOpen = false;
     this.game.events.on('openNode',  () => { this.nodePanelOpen = true; });
     this.game.events.on('closeNode', () => { this.nodePanelOpen = false; });
+
+    // ── Return to menu (from test environment back button) ────────────────
+    this.game.events.once('returnToMenu', () => {
+      console.log('[GameScene] returnToMenu received');
+      ['UIScene','NodePanel','TooltipScene','ResearchScene','CombatScene'].forEach(k => {
+        const active = this.scene.isActive(k);
+        const paused = this.scene.isPaused(k);
+        console.log(`[GameScene] ${k} active=${active} paused=${paused}`);
+        try {
+          if (active || paused) this.scene.stop(k);
+        } catch(e) { console.error(`[GameScene] stop ${k} error:`, e); }
+      });
+      console.log('[GameScene] about to start MainMenuScene');
+      this.time.delayedCall(0, () => {
+        console.log('[GameScene] delayedCall firing, starting MainMenuScene');
+        this.scene.start('MainMenuScene');
+      });
+    });
+  }
+
+  // ── Normal procedural map (standard game) ────────────────────────────────
+  _createNormalMap() {
+    const mapData = generateMapForPlayers(this.playerCount);
+    this._nodes   = mapData.nodes;
+    this._edges   = mapData.edges;
+    this._mapW    = mapData.mapW;
+    this._mapH    = mapData.mapH;
+
+    this._nodes.forEach(n => this.nodeMap.set(n.id, n));
+    this.adjacency = buildAdjacency(this._edges);
+
+    const PLANET_TYPES = ['molten', 'habitable', 'barren', 'sulfuric'];
+    this.nodeMap.forEach(node => {
+      node.type      = PLANET_TYPES[Math.floor(Math.random() * PLANET_TYPES.length)];
+      node.baseFood  = node.food;
+      node.baseMetal = node.metal;
+      node.baseFuel  = node.fuel;
+    });
+
+    this.mapGfx       = this.add.graphics();
+    this.ownershipGfx = this.add.graphics().setDepth(4);
+    this.drawMap();
+
+    const nodeIds    = Array.from(this.nodeMap.keys());
+    const totalNodes = nodeIds.length;
+    const usedNodes  = new Set();
+
+    const pickAdjacentNode = (nodeA) => {
+      const neighbours = this.adjacency.get(nodeA) || [];
+      const free = neighbours.find(nid => !usedNodes.has(nid));
+      return free || neighbours[0] || nodeIds.find(nid => !usedNodes.has(nid));
+    };
+
+    for (let p = 0; p < this.playerCount; p++) {
+      const team   = p === 0 ? 'player' : `player${p + 1}`;
+      let startI   = Math.round((p / this.playerCount) * totalNodes);
+      while (usedNodes.has(nodeIds[startI % totalNodes])) startI++;
+      const nodeA  = nodeIds[startI % totalNodes];
+      const nodeB  = pickAdjacentNode(nodeA);
+      usedNodes.add(nodeA);
+      usedNodes.add(nodeB);
+      this.spawnStack(nodeA, team, 0, { ...emptyComposition(), flagship: 1, fighter: 10 });
+      this.spawnStack(nodeB, team, 0, { ...emptyComposition(), fighter: 10 });
+    }
+
+    nodeIds.forEach(nid => {
+      if (!usedNodes.has(nid)) {
+        this.spawnStack(nid, 'neutral', 0, { ...emptyComposition(), fighter: 10 });
+      }
+    });
+  }
+
+  // ── Test environment map ──────────────────────────────────────────────────
+  // 3 planets in a triangle. All produce 10/10/10.
+  //   test_player  — owned by player, no starting units, flagship for game rules
+  //   test_neutral — owned by neutral, 10 fighters
+  //   test_enemy   — owned by player2 (red), 10 fighters
+  _createTestMap() {
+    const CX = 640, CY = 340, R = 200;
+    const angles = [-Math.PI / 2, -Math.PI / 2 + (2 * Math.PI / 3), -Math.PI / 2 + (4 * Math.PI / 3)];
+
+    const makeNode = (id, label, angleIdx) => ({
+      id, label,
+      x: Math.round(CX + R * Math.cos(angles[angleIdx])),
+      y: Math.round(CY + R * Math.sin(angles[angleIdx])),
+      food: 10, metal: 10, fuel: 10,
+      baseFood: 10, baseMetal: 10, baseFuel: 10,
+      type: 'habitable',
+      buildings: [],
+    });
+
+    const playerNode  = makeNode('test_player',  'Test Base',   0);
+    const neutralNode = makeNode('test_neutral', 'Neutral',     1);
+    const enemyNode   = makeNode('test_enemy',   'Enemy Outpost', 2);
+
+    this._nodes = [playerNode, neutralNode, enemyNode];
+    this._edges = [
+      { from: 'test_player', to: 'test_neutral' },
+      { from: 'test_player', to: 'test_enemy'   },
+      { from: 'test_neutral', to: 'test_enemy'  },
+    ];
+    this._mapW = 1280;
+    this._mapH = 720;
+
+    this._nodes.forEach(n => this.nodeMap.set(n.id, n));
+    this.adjacency = buildAdjacency(this._edges);
+
+    this.mapGfx       = this.add.graphics();
+    this.ownershipGfx = this.add.graphics().setDepth(4);
+    this.drawMap();
+
+    // Player planet: no combat units — just flag ownership + flagship (hidden, required by game rules)
+    this.spawnStack('test_player',  'player',  0, { ...emptyComposition(), flagship: 1 });
+    // Neutral planet: 10 fighters
+    this.spawnStack('test_neutral', 'neutral', 0, { ...emptyComposition(), fighter: 10 });
+    // Enemy planet: 10 fighters, red team
+    this.spawnStack('test_enemy',   'player2', 0, { ...emptyComposition(), fighter: 10 });
   }
 
   update(time, delta) {
@@ -181,6 +266,51 @@ export default class GameScene extends Phaser.Scene {
     this.combatManager?.update(delta);
     this._tickResources(delta);
     this._tickUnitProduction(delta);
+  }
+
+  // Called automatically by Phaser when this scene is stopped/restarted.
+  // Removes every game.events listener registered by this scene so they don't
+  // accumulate and double-fire on the next session.
+  shutdown() {
+    console.log('[GameScene] shutdown() called');
+    const ev = this.game.events;
+    ev.removeAllListeners('openAsteroid');
+    ev.removeAllListeners('openMiner');
+    ev.removeAllListeners('splitStack');
+    ev.removeAllListeners('buildingAdded');
+    ev.removeAllListeners('deductResources');
+    ev.removeAllListeners('openNode');
+    ev.removeAllListeners('closeNode');
+    ev.removeAllListeners('openAsteroidPanel');
+    ev.removeAllListeners('asteroidMinerStateChanged');
+    ev.removeAllListeners('nodeResourcesUpdated');
+    ev.removeAllListeners('researchAddRP');
+    ev.removeAllListeners('researchClosed');
+    ev.removeAllListeners('openResearch');
+    ev.removeAllListeners('closeResearch');
+    ev.removeAllListeners('openCombat');
+    ev.removeAllListeners('combatUpdate');
+    ev.removeAllListeners('closeCombat');
+    ev.removeAllListeners('returnToMenu');
+    ev.removeAllListeners('researchUnlocked');
+
+    // Stop child scenes that are still running
+    ['UIScene','NodePanel','TooltipScene','ResearchScene','CombatScene'].forEach(k => {
+      try {
+        if (this.scene.isActive(k) || this.scene.isPaused(k)) this.scene.stop(k);
+      } catch(_) {}
+    });
+
+    // Clean up units and state
+    this.units.forEach(u => { try { u.destroy(); } catch(_) {} });
+    this.units = [];
+    this.nodeMap.clear();
+    this.adjacency = null;
+    this.selectedStack = null;
+    this.combatManager = null;
+    this.asteroidManager = null;
+    this.perkManager?.destroy();
+    this.perkManager = null;
   }
 
   // ── Map rendering ──────────────────────────────────────────────────────

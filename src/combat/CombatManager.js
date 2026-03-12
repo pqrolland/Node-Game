@@ -76,6 +76,9 @@ export default class CombatManager {
     this._gfx     = scene.add.graphics().setDepth(12);
   }
 
+  // Lazy accessor — PerkManager is created after CombatManager in GameScene
+  get _perks() { return this._scene.perkManager; }
+
   // ── Public: start a battle ────────────────────────────────────────────────
   startBattle(attacker, defender) {
     if (attacker.inCombat || defender.inCombat) return;
@@ -138,8 +141,11 @@ export default class CombatManager {
 
     // ── Phase 1 + 2: Pre-Strike & Resolution ─────────────────────────────
     // Count destroyers BEFORE any damage so both sides stage simultaneously.
-    const atkBarrageShots = (attacker.unitHP.destroyer?.filter(h => h > 0).length ?? 0) * BARRAGE_SHOTS_PER_DESTROYER;
-    const defBarrageShots = (defender.unitHP.destroyer?.filter(h => h > 0).length ?? 0) * BARRAGE_SHOTS_PER_DESTROYER;
+    const atkBaseShots = (attacker.unitHP.destroyer?.filter(h => h > 0).length ?? 0) * BARRAGE_SHOTS_PER_DESTROYER;
+    const defBaseShots = (defender.unitHP.destroyer?.filter(h => h > 0).length ?? 0) * BARRAGE_SHOTS_PER_DESTROYER;
+    // Perk hook: Improved Barrage may increase attacker's shot count
+    const atkBarrageShots = this._perks?.getBarrageShots(attacker, atkBaseShots) ?? atkBaseShots;
+    const defBarrageShots = this._perks?.getBarrageShots(defender, defBaseShots) ?? defBaseShots;
 
     // Stage barrage damage for both sides independently
     const atkBarrageBuf = _stageBarrage(atkBarrageShots, defender.unitHP);
@@ -177,8 +183,11 @@ export default class CombatManager {
     const defCountAfterPS = defender.stackSize;
 
     // Build attack queues from surviving ships (attacks-per-round entries each)
-    const atkQueue = _buildAttackQueue(attacker.unitHP);
-    const defQueue = _buildAttackQueue(defender.unitHP);
+    const atkQueueBase = _buildAttackQueue(attacker.unitHP);
+    const defQueueBase = _buildAttackQueue(defender.unitHP);
+    // Perk hook: Command Aura, Dense Formation may modify damage values
+    const atkQueue = this._perks?.buildAttackQueue(attacker, atkQueueBase) ?? atkQueueBase;
+    const defQueue = this._perks?.buildAttackQueue(defender, defQueueBase) ?? defQueueBase;
 
     // Stage damage simultaneously — doomed ships excluded from further targeting
     const atkStrike = _stageDamage(atkQueue, defender.unitHP);
@@ -189,8 +198,10 @@ export default class CombatManager {
     _applyBuffer(defStrike, attacker.unitHP);
 
     // Prune dead ships; run cruiser repair for this phase only
-    const atkRepair = _pruneHPWithRepair(attacker.unitHP, attacker.composition);
-    const defRepair = _pruneHPWithRepair(defender.unitHP, defender.composition);
+    const atkRepairChance = this._perks?.getRepairChance(attacker, 0.5) ?? 0.5;
+    const defRepairChance = this._perks?.getRepairChance(defender, 0.5) ?? 0.5;
+    const atkRepair = _pruneHPWithRepair(attacker.unitHP, attacker.composition, atkRepairChance);
+    const defRepair = _pruneHPWithRepair(defender.unitHP, defender.composition, defRepairChance);
     attacker.stackSize = _stackSize(attacker.composition);
     defender.stackSize = _stackSize(defender.composition);
 
@@ -417,7 +428,7 @@ function _stageBarrage(totalShots, targetHP) {
 
 // Build a main-strike attack queue from a unit's HP pool.
 // Each living ship contributes (attacks-per-round) entries at (damage-per-attack).
-// Returns [{ damage }]
+// Returns [{ shipType, damage }]
 function _buildAttackQueue(unitHP) {
   const q = [];
   for (const type of SHIP_ORDER) {
@@ -425,7 +436,7 @@ function _buildAttackQueue(unitHP) {
     const stat = SHIP_STATS[type];
     for (let i = 0; i < hps.length; i++) {
       if (hps[i] > 0) {
-        for (let a = 0; a < stat.attacks; a++) q.push({ damage: stat.damage });
+        for (let a = 0; a < stat.attacks; a++) q.push({ shipType: type, damage: stat.damage });
       }
     }
   }
@@ -481,8 +492,9 @@ function _pruneHP(unitHP, composition) {
 }
 
 // Remove dead ships and run cruiser repair (Phase 4 only).
+// repairChance: probability each dead cruiser returns (default 0.5, modified by Field Medics).
 // Returns { dead, repaired, failed } — caller logs results in desired order.
-function _pruneHPWithRepair(unitHP, composition) {
+function _pruneHPWithRepair(unitHP, composition, repairChance = 0.5) {
   let result = { dead: 0, repaired: 0, failed: 0 };
 
   for (const type of SHIP_ORDER) {
@@ -494,7 +506,7 @@ function _pruneHPWithRepair(unitHP, composition) {
     if (type === 'cruiser' && dead > 0) {
       result.dead = dead;
       for (let i = 0; i < dead; i++) {
-        if (Math.random() < 0.5) {
+        if (Math.random() < repairChance) {
           unitHP[type].push(SHIP_STATS[type].hp);
           composition[type]++;
           result.repaired++;

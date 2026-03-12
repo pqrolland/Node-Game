@@ -117,6 +117,32 @@ export default class UIScene extends Phaser.Scene {
       this._drawResearchBtn(false);
     });
 
+    // ── Test mode: "← MENU" button + indicator ────────────────────────────
+    const gameScene = this.scene.get('GameScene');
+    if (gameScene && gameScene.testMode) {
+      // Amber label so it's obviously not a normal game
+      this.add.text(width / 2, 10, '⚗ TEST ENVIRONMENT', {
+        font: 'bold 11px monospace', color: '#ffaa22', letterSpacing: 3,
+      }).setOrigin(0.5, 0).setDepth(10);
+
+      // Back to Menu button — left side of top bar, clear of player label
+      const MX = 220, MY = TOP_BAR_H / 2;
+      const menuBg = this.add.graphics().setDepth(10);
+      const drawMenuIdle  = () => { menuBg.clear(); menuBg.fillStyle(0x1a1000,1); menuBg.fillRoundedRect(MX-48,MY-12,96,24,4); menuBg.lineStyle(1.5,0xffaa22,0.7); menuBg.strokeRoundedRect(MX-48,MY-12,96,24,4); };
+      const drawMenuHover = () => { menuBg.clear(); menuBg.fillStyle(0x332200,1); menuBg.fillRoundedRect(MX-48,MY-12,96,24,4); menuBg.lineStyle(1.5,0xffdd66,1); menuBg.strokeRoundedRect(MX-48,MY-12,96,24,4); };
+      drawMenuIdle();
+      this.add.text(MX, MY, '← MENU', {
+        font: 'bold 11px monospace', color: '#ffaa22',
+      }).setOrigin(0.5, 0.5).setDepth(11);
+      const menuZone = this.add.rectangle(MX, MY, 96, 24, 0xffffff, 0)
+        .setDepth(12).setInteractive({ useHandCursor: true });
+      menuZone.on('pointerover',  drawMenuHover);
+      menuZone.on('pointerout',   drawMenuIdle);
+      menuZone.on('pointerdown',  () => {
+        this.game.events.emit('returnToMenu');
+      });
+    }
+
     // ── Bottom bar ─────────────────────────────────────────────────────────
     this.add.rectangle(0, height - 80, width, 80, 0x080c14, 0.97).setOrigin(0, 0);
     this.add.rectangle(0, height - 82, width, 2, 0x2255aa, 0.8).setOrigin(0, 0);

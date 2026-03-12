@@ -561,7 +561,7 @@ const TREE_DEFS = [
             desc: 'Base destroyer doctrine — pre-strike kills 2 enemy fighters before combat.', tested: true },
     pool: [
       { id: 'd_01', name: 'Improved Barrage',  icon: PERK_ICONS['Improved Barrage'],  desc: 'Pre-strike kills 3 Fighters instead of 2.' },
-      { id: 'd_02', name: 'Reinforced Hull',   icon: PERK_ICONS['Reinforced Hull'],   desc: 'Each Destroyer gains +10 HP.' },
+      { id: 'd_02', name: 'Reinforced Hull',   icon: PERK_ICONS['Reinforced Hull'],   desc: 'Each Destroyer gains +10 HP.', tested: true },
       { id: 'd_03', name: 'Rapid Scramble',    icon: PERK_ICONS['Rapid Scramble'],    desc: 'Destroyers launch 30% faster from Destroyer Factories.' },
       { id: 'd_04', name: 'Hunter Protocol',   icon: PERK_ICONS['Hunter Protocol'],   desc: 'Each Destroyer deals +2 damage against Dreadnaughts and Flagships.' },
       { id: 'd_05', name: 'Torpedo Spread',    icon: PERK_ICONS['Torpedo Spread'],    desc: 'Each Destroyer Pre-Strike can hit non-Fighter ships for 15 damage.' },
@@ -580,7 +580,7 @@ const TREE_DEFS = [
             desc: 'Base cruiser doctrine — 50% repair chance on destruction.', tested: true },
     pool: [
       { id: 'c_01', name: 'Field Medics',       icon: PERK_ICONS['Field Medics'],       desc: 'Cruiser repair chance increases from 50% to 65%.' },
-      { id: 'c_02', name: 'Reinforced Hull',    icon: PERK_ICONS['Reinforced Hull'],    desc: 'Each Cruiser gains +10 HP.' },
+      { id: 'c_02', name: 'Reinforced Hull',    icon: PERK_ICONS['Reinforced Hull'],    desc: 'Each Cruiser gains +10 HP.', tested: true },
       { id: 'c_03', name: 'Nanite Repair',      icon: PERK_ICONS['Nanite Repair'],      desc: 'Repaired Cruisers return at full health.' },
       { id: 'c_04', name: 'Escort Formation',   icon: PERK_ICONS['Escort Formation'],   desc: 'Each Cruiser absorbs one hit directed at the Flagship per Main Strike round.' },
       { id: 'c_05', name: 'Regeneration Field', icon: PERK_ICONS['Regeneration Field'], desc: 'Each friendly ship in a stack with a Cruiser gains +5 HP.' },
@@ -599,7 +599,7 @@ const TREE_DEFS = [
             desc: 'Base capital doctrine — 20 damage × 2 attacks, 50 HP.', tested: true },
     pool: [
       { id: 'dr_01', name: 'Siege Cannons',   icon: PERK_ICONS['Siege Cannons'],   desc: 'Each Dreadnaught\'s attack increases by +5 damage.' },
-      { id: 'dr_02', name: 'Reinforced Hull', icon: PERK_ICONS['Reinforced Hull'], desc: 'Each Dreadnaught gains +15 HP.' },
+      { id: 'dr_02', name: 'Reinforced Hull', icon: PERK_ICONS['Reinforced Hull'], desc: 'Each Dreadnaught gains +15 HP.', tested: true },
       { id: 'dr_03', name: 'Orbital Strike',  icon: PERK_ICONS['Orbital Strike'],  desc: 'Dreadnaught stacks deal 5 Pre-Strike damage to all enemies.' },
       { id: 'dr_04', name: 'Afterburner',     icon: PERK_ICONS['Afterburner'],     desc: 'Each Dreadnaught increases stack movement speed by 10%.' },
       { id: 'dr_05', name: 'Mass Driver',     icon: PERK_ICONS['Mass Driver'],     desc: 'When a Dreadnaught is alone in a stack, its attacks count as 30 damage × 3.' },
@@ -620,7 +620,7 @@ const TREE_DEFS = [
       { id: 'fl_01', name: 'Command Aura',      icon: PERK_ICONS['Command Aura'],      desc: 'All ships in the Flagship\'s stack gain +1 attack.' },
       { id: 'fl_02', name: 'Emergency Shield',  icon: PERK_ICONS['Emergency Shield'],  desc: 'Flagship survives one lethal hit per battle.' },
       { id: 'fl_03', name: 'Rally Beacon',      icon: PERK_ICONS['Rally Beacon'],      desc: 'Stacks containing a Flagship have movement speed increased by 50%.' },
-      { id: 'fl_04', name: 'Reinforced Hull',   icon: PERK_ICONS['Reinforced Hull'],   desc: 'Each Flagship gains +50 HP.' },
+      { id: 'fl_04', name: 'Reinforced Hull',   icon: PERK_ICONS['Reinforced Hull'],   desc: 'Each Flagship gains +50 HP.', tested: true },
       { id: 'fl_05', name: 'Last Stand',        icon: PERK_ICONS['Last Stand'],        desc: 'Each Flagship deals +10 damage and attacks 1 additional time when their stack is outnumbered.' },
       { id: 'fl_06', name: 'First Strike',      icon: PERK_ICONS['First Strike'],      desc: 'Each Flagship gains a Pre-Strike of 20 damage.' },
       { id: 'fl_07', name: 'Iron Reserve',      icon: PERK_ICONS['Iron Reserve'],      desc: 'Each Flagship generates +5 Food, Metal, and Fuel per resource tick.' },
@@ -1038,8 +1038,8 @@ export default class ResearchScene extends Phaser.Scene {
         T.push(st);
       }
 
-      // Red ✕ WIP badge — top-right corner of every non-root node
-      if (!isRoot) {
+      // Red ✕ WIP badge — top-right corner of every non-root, non-tested node
+      if (!isRoot && !node.tested) {
         const BX = NX + NODE_W - 11, BY = y + 10;
         const badgeG = this.add.graphics().setDepth(93);
         badgeG.fillStyle(0x660000, 1);

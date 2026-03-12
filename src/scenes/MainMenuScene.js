@@ -13,6 +13,7 @@ export default class MainMenuScene extends Phaser.Scene {
   }
 
   create() {
+    console.log('[MainMenuScene] create() called');
     const { width, height } = this.scale;
     this._playerCount = 1;
 
@@ -66,21 +67,22 @@ export default class MainMenuScene extends Phaser.Scene {
     rule.lineBetween(width / 2 - 140, height * 0.20 + 80, width / 2 + 140, height * 0.20 + 80);
   }
 
-  // ── Nav buttons (PLAY / HOW TO PLAY / SETTINGS / ACHIEVEMENTS) ─────────────
+  // ── Nav buttons (PLAY / TEST ENVIRONMENT / HOW TO PLAY / SETTINGS / ACHIEVEMENTS) ─────────────
   _buildNavButtons(width, height) {
     const CX  = width / 2 - 160;
-    const TOP = height * 0.48;
-    const GAP = 56;
+    const TOP = height * 0.44;
+    const GAP = 52;
 
-    this._playBtn = this._makeBtn(CX, TOP,          'PLAY',         160, 44, () => this._onPlay());
-    this._htpBtn  = this._makeBtn(CX, TOP + GAP,    'HOW TO PLAY',  160, 44, () => this._onHowToPlay());
-    this._makeGhostedBtn(CX, TOP + GAP * 2, 'SETTINGS',     160, 44);
-    this._makeGhostedBtn(CX, TOP + GAP * 3, 'ACHIEVEMENTS', 160, 44);
+    this._playBtn = this._makeBtn(CX, TOP,          'PLAY',              160, 44, () => this._onPlay());
+    this._testBtn = this._makeBtn(CX, TOP + GAP,    'TEST ENVIRONMENT',  160, 44, () => this._startTestEnv(), '#44ffaa', '#1a4a33');
+    this._htpBtn  = this._makeBtn(CX, TOP + GAP*2,  'HOW TO PLAY',       160, 44, () => this._onHowToPlay());
+    this._makeGhostedBtn(CX, TOP + GAP * 3, 'SETTINGS',     160, 44);
+    this._makeGhostedBtn(CX, TOP + GAP * 4, 'ACHIEVEMENTS', 160, 44);
 
-    this.add.text(CX, TOP + GAP * 3 + 58, 'Build your fleet.', {
+    this.add.text(CX, TOP + GAP * 4 + 58, 'Build your fleet.', {
       fontFamily: 'monospace', fontSize: '11px', color: '#2a4a6a',
     }).setOrigin(0.5).setDepth(2);
-    this.add.text(CX, TOP + GAP * 3 + 74, 'Capture the galaxy.', {
+    this.add.text(CX, TOP + GAP * 4 + 74, 'Capture the galaxy.', {
       fontFamily: 'monospace', fontSize: '11px', color: '#2a4a6a',
     }).setOrigin(0.5).setDepth(2);
   }
@@ -334,17 +336,25 @@ export default class MainMenuScene extends Phaser.Scene {
     this._optionsContainer.setVisible(false);
     this._htpContainer.setVisible(false);
     this._playBtn.setVisible(true);
+    this._testBtn.setVisible(true);
     this._htpBtn.setVisible(true);
   }
 
   _onPlay() {
     this._playBtn.setVisible(false);
+    this._testBtn.setVisible(false);
     this._htpBtn.setVisible(false);
     this._optionsContainer.setVisible(false);
     this._htpContainer.setVisible(false);
     this._optionsContainer.setAlpha(0);
     this._optionsContainer.setVisible(true);
     this.tweens.add({ targets: this._optionsContainer, alpha: 1, duration: 200, ease: 'Linear' });
+  }
+
+  _startTestEnv() {
+    this.cameras.main.fadeOut(300, 8, 12, 20, (_cam, progress) => {
+      if (progress === 1) this.scene.start('GameScene', { playerCount: 1, testMode: true });
+    });
   }
 
   _onHowToPlay() {
@@ -387,12 +397,16 @@ export default class MainMenuScene extends Phaser.Scene {
     return `${total} planets  ·  ${p * 2} player  ·  ${total - p * 2} neutral`;
   }
 
-  _makeBtn(cx, cy, label, w, h, onClick) {
+  _makeBtn(cx, cy, label, w, h, onClick, textCol = '#44aaff', fillIdle = '#0d2244') {
     const bg = this.add.graphics().setDepth(2);
-    const drawIdle  = () => { bg.clear(); bg.fillStyle(0x0d2244,1); bg.fillRoundedRect(cx-w/2,cy-h/2,w,h,5); bg.lineStyle(2,0x44aaff,0.8); bg.strokeRoundedRect(cx-w/2,cy-h/2,w,h,5); };
-    const drawHover = () => { bg.clear(); bg.fillStyle(0x1a3a6a,1); bg.fillRoundedRect(cx-w/2,cy-h/2,w,h,5); bg.lineStyle(2,0x88ccff,1); bg.strokeRoundedRect(cx-w/2,cy-h/2,w,h,5); };
+    const fillIdleInt  = Phaser.Display.Color.HexStringToColor(fillIdle).color;
+    const borderIdle   = textCol === '#44ffaa' ? 0x44ffaa : 0x44aaff;
+    const borderHover  = textCol === '#44ffaa' ? 0xaaffcc : 0x88ccff;
+    const fillHoverInt = textCol === '#44ffaa' ? 0x0d2e1a : 0x1a3a6a;
+    const drawIdle  = () => { bg.clear(); bg.fillStyle(fillIdleInt,1); bg.fillRoundedRect(cx-w/2,cy-h/2,w,h,5); bg.lineStyle(2,borderIdle,0.8); bg.strokeRoundedRect(cx-w/2,cy-h/2,w,h,5); };
+    const drawHover = () => { bg.clear(); bg.fillStyle(fillHoverInt,1); bg.fillRoundedRect(cx-w/2,cy-h/2,w,h,5); bg.lineStyle(2,borderHover,1); bg.strokeRoundedRect(cx-w/2,cy-h/2,w,h,5); };
     drawIdle();
-    const lbl  = this.add.text(cx, cy, label, { fontFamily: 'monospace', fontSize: '14px', fontStyle: 'bold', color: '#44aaff', letterSpacing: 3 }).setOrigin(0.5).setDepth(2);
+    const lbl  = this.add.text(cx, cy, label, { fontFamily: 'monospace', fontSize: '13px', fontStyle: 'bold', color: textCol, letterSpacing: 2 }).setOrigin(0.5).setDepth(2);
     const zone = this.add.rectangle(cx, cy, w, h, 0xffffff, 0).setInteractive({ useHandCursor: true }).setDepth(2);
     zone.on('pointerover',  drawHover);
     zone.on('pointerout',   drawIdle);
