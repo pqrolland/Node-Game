@@ -1183,6 +1183,7 @@ export default class NodePanel extends Phaser.Scene {
     // ── Composition rows ──────────────────────────────────────────────────
     const stack = this.activeStacks[this._activeStackIdx || 0];
     const comp  = stack?.composition || {};
+    const stackTeam = stack?.team ?? null;
     const SHIP_LABELS = {
       flagship:    { label: 'Flagship',    color: 0xffdd44 },
       dreadnaught: { label: 'Dreadnaught', color: 0xff8844 },
@@ -1223,11 +1224,11 @@ export default class NodePanel extends Phaser.Scene {
         labelTxt.on('pointerover', () => {
           labelTxt.setColor('#ffffff');
           const ptr = this.input.activePointer;
-          this.game.events.emit('showTooltip', { key: type, x: ptr.x, y: ptr.y });
+          this.game.events.emit('showTooltip', { key: type, x: ptr.x, y: ptr.y, team: stackTeam, composition: comp });
         });
         labelTxt.on('pointermove', () => {
           const ptr = this.input.activePointer;
-          this.game.events.emit('showTooltip', { key: type, x: ptr.x, y: ptr.y });
+          this.game.events.emit('showTooltip', { key: type, x: ptr.x, y: ptr.y, team: stackTeam, composition: comp });
         });
         labelTxt.on('pointerout', () => {
           labelTxt.setColor('#aaccff');

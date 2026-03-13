@@ -272,15 +272,35 @@ Each tooltip shows the unit's icon, role, real HP/damage/attack stats, any speci
 
 ---
 
+## 🔬 Research
+
+Access the **Research** overlay via the **RESEARCH** button in the top HUD. Spend **Research Points** (accumulated passively) to unlock perks across 8 trees.
+
+### Tested & Active Perks
+
+| Perk | Tree | Effect |
+|---|---|---|
+| **Reinforced Hull** | Fighter / Destroyer / Cruiser / Dreadnaught / Flagship | Increases max HP per ship (+10 Destroyer, +10 Cruiser, +15 Dreadnaught, +50 Flagship) |
+| **Improved Barrage** | Destroyer | Pre-strike fires 3 shots per Destroyer instead of 2 |
+| **Dense Formation** | Fighter / Destroyer | Each ship of that type gains +1 attack damage |
+| **Command Aura** | Flagship | All ships in the Flagship's stack gain +1 attack damage |
+
+### In Development (not yet active)
+- **Field Medics** (Cruiser) — repair chance 50% → 65%
+- 75 further perks across all 8 trees
+
+Perks shown with a red **✕** badge in the Research overlay are not yet implemented.
+
+---
+
 ## 🗺 Roadmap & Design Intent
 
 ### Phase A — Depth (current focus)
 Make each playthrough strategically distinct before adding players.
 
 | Feature | Status | Notes |
-|---|---|---|
-| Research Tree | Planned | Unlocks ship upgrades and building tiers. Core replayability driver. |
-| Ship Upgrades | Planned | Pairs with Research. Makes your fleet composition unique each game. |
+|---|---|---|\n| Research Tree | ✅ In Progress | 80 perks across 8 trees. 5 perks tested & active. Pool-based RP spending. |
+| Ship Upgrades | ✅ In Progress | Reinforced Hull (+HP), Dense Formation (+dmg), Improved Barrage, Command Aura all live. |
 | Building Upgrades + Planetary Power | Planned | Energy capacity per planet forces meaningful build decisions. |
 | Missile Carriers | Planned | Ranged unit using the existing projectile system. New combat dimension. |
 | Planetary Defense | Planned | Building with intercept radius. Counters missile carriers and meteors. |

@@ -46,23 +46,62 @@ export const SHIP_ORDER = ['fighter', 'destroyer', 'cruiser', 'dreadnaught', 'fl
 
 // ── HP helpers ────────────────────────────────────────────────────────────────
 
-export function initUnitHP(unit) {
+// Compute the correct max HP for a ship type on a given team.
+// Reads base SHIP_STATS then adds any researched bonuses from perkManager.
+// This is the single source of truth for max HP — never mutate SHIP_STATS.
+export function computeMaxHP(type, team, perkManager) {
+  let hp = SHIP_STATS[type].hp;
+  if (perkManager) hp = perkManager.applyMaxHPBonus(type, team, hp);
+  return hp;
+}
+
+// Ensure unit.maxHP exists, computed correctly for this unit's team.
+// Safe to call multiple times — skips if already set.
+export function ensureMaxHP(unit, perkManager) {
+  if (unit.maxHP) return;
+  unit.maxHP = {};
+  for (const type of SHIP_ORDER) {
+    unit.maxHP[type] = computeMaxHP(type, unit.team, perkManager);
+  }
+}
+
+// Recompute unit.maxHP from scratch (call after new perk is researched).
+// Also bumps current unitHP values proportionally so ships don't lose HP.
+export function recomputeMaxHP(unit, perkManager) {
+  for (const type of SHIP_ORDER) {
+    const oldMax = unit.maxHP?.[type] ?? SHIP_STATS[type].hp;
+    const newMax = computeMaxHP(type, unit.team, perkManager);
+    if (!unit.maxHP) unit.maxHP = {};
+    unit.maxHP[type] = newMax;
+    // Top up existing ships by the bonus amount
+    const bonus = newMax - oldMax;
+    if (bonus > 0 && unit.unitHP?.[type]) {
+      for (let i = 0; i < unit.unitHP[type].length; i++) {
+        unit.unitHP[type][i] += bonus;
+      }
+    }
+  }
+}
+
+export function initUnitHP(unit, perkManager) {
+  ensureMaxHP(unit, perkManager);
   unit.unitHP = {};
   for (const type of SHIP_ORDER) {
     const count = unit.composition[type] || 0;
-    unit.unitHP[type] = Array.from({ length: count }, () => SHIP_STATS[type].hp);
+    unit.unitHP[type] = Array.from({ length: count }, () => unit.maxHP[type]);
   }
 }
 
 // Reconcile unitHP with composition.
 // Adds full-HP entries for any ships in composition not yet in unitHP.
 // Trims excess unitHP entries if composition shrank externally.
-export function syncUnitHP(unit) {
-  if (!unit.unitHP) { initUnitHP(unit); return; }
+export function syncUnitHP(unit, perkManager) {
+  ensureMaxHP(unit, perkManager);
+  if (!unit.unitHP) { initUnitHP(unit, perkManager); return; }
   for (const type of SHIP_ORDER) {
     const count = unit.composition[type] || 0;
     if (!unit.unitHP[type]) unit.unitHP[type] = [];
-    while (unit.unitHP[type].length < count) unit.unitHP[type].push(SHIP_STATS[type].hp);
+    while (unit.unitHP[type].length < count) unit.unitHP[type].push(unit.maxHP[type]);
     if (unit.unitHP[type].length > count)    unit.unitHP[type] = unit.unitHP[type].slice(0, count);
   }
 }
@@ -84,8 +123,8 @@ export default class CombatManager {
     if (attacker.inCombat || defender.inCombat) return;
     if (attacker._dead   || defender._dead)    return;
 
-    syncUnitHP(attacker);
-    syncUnitHP(defender);
+    syncUnitHP(attacker, this._perks);
+    syncUnitHP(defender, this._perks);
 
     attacker.inCombat = true;  defender.inCombat = true;
     attacker.isMoving = false; defender.isMoving = false;
@@ -136,8 +175,8 @@ export default class CombatManager {
     const ui  = this._scene.scene.get('UIScene');
 
     // Reconcile HP arrays with composition (handles mid-battle reinforcements)
-    syncUnitHP(attacker);
-    syncUnitHP(defender);
+    syncUnitHP(attacker, this._perks);
+    syncUnitHP(defender, this._perks);
 
     // ── Phase 1 + 2: Pre-Strike & Resolution ─────────────────────────────
     // Count destroyers BEFORE any damage so both sides stage simultaneously.
@@ -200,8 +239,8 @@ export default class CombatManager {
     // Prune dead ships; run cruiser repair for this phase only
     const atkRepairChance = this._perks?.getRepairChance(attacker, 0.5) ?? 0.5;
     const defRepairChance = this._perks?.getRepairChance(defender, 0.5) ?? 0.5;
-    const atkRepair = _pruneHPWithRepair(attacker.unitHP, attacker.composition, atkRepairChance);
-    const defRepair = _pruneHPWithRepair(defender.unitHP, defender.composition, defRepairChance);
+    const atkRepair = _pruneHPWithRepair(attacker.unitHP, attacker.composition, atkRepairChance, attacker.maxHP);
+    const defRepair = _pruneHPWithRepair(defender.unitHP, defender.composition, defRepairChance, defender.maxHP);
     attacker.stackSize = _stackSize(attacker.composition);
     defender.stackSize = _stackSize(defender.composition);
 
@@ -493,8 +532,9 @@ function _pruneHP(unitHP, composition) {
 
 // Remove dead ships and run cruiser repair (Phase 4 only).
 // repairChance: probability each dead cruiser returns (default 0.5, modified by Field Medics).
+// maxHP: per-type max HP map from unit.maxHP (so repaired cruisers return at their team's HP).
 // Returns { dead, repaired, failed } — caller logs results in desired order.
-function _pruneHPWithRepair(unitHP, composition, repairChance = 0.5) {
+function _pruneHPWithRepair(unitHP, composition, repairChance = 0.5, maxHP = SHIP_STATS) {
   let result = { dead: 0, repaired: 0, failed: 0 };
 
   for (const type of SHIP_ORDER) {
@@ -505,9 +545,10 @@ function _pruneHPWithRepair(unitHP, composition, repairChance = 0.5) {
 
     if (type === 'cruiser' && dead > 0) {
       result.dead = dead;
+      const fullHP = maxHP[type]?.hp ?? maxHP[type] ?? SHIP_STATS[type].hp;
       for (let i = 0; i < dead; i++) {
         if (Math.random() < repairChance) {
-          unitHP[type].push(SHIP_STATS[type].hp);
+          unitHP[type].push(fullHP);
           composition[type]++;
           result.repaired++;
         }
@@ -519,12 +560,13 @@ function _pruneHPWithRepair(unitHP, composition, repairChance = 0.5) {
 }
 
 // Restore all surviving ships to full HP after combat ends.
-// unitHP entries for dead ships are already pruned — only living ships remain.
+// Uses unit.maxHP so perk-boosted teams heal to their correct higher HP.
 function _fullHeal(unit) {
   if (!unit.unitHP) return;
+  ensureMaxHP(unit);
   for (const type of SHIP_ORDER) {
-    const hps     = unit.unitHP[type];
-    const maxHP   = SHIP_STATS[type]?.hp;
+    const hps   = unit.unitHP[type];
+    const maxHP = unit.maxHP[type];
     if (!hps || !maxHP) continue;
     for (let i = 0; i < hps.length; i++) hps[i] = maxHP;
   }

@@ -2,12 +2,19 @@
  * TooltipScene.js
  * Floating keyword tooltip panel — always on top of every other scene (depth 200).
  *
+ * Unit tooltip shows on the left. If the unit belongs to a team with relevant
+ * unlocked research perks, a second "Perks Active" panel renders to its right.
+ *
  * Usage from any scene:
- *   this.game.events.emit('showTooltip', { key: 'destroyer', x, y });
+ *   this.game.events.emit('showTooltip', { key: 'destroyer', x, y, team, composition });
  *   this.game.events.emit('hideTooltip');
+ *
+ * team        — (optional) the owning team string, e.g. 'player', 'player2'
+ * composition — (optional) the stack's composition map, used to gate 'all' perks
  */
 
 import { drawShipIcon } from '../units/Unit.js';
+import { PERK_ICONS } from './ResearchScene.js';
 
 // ── Ship / keyword definitions ────────────────────────────────────────────────
 export const TOOLTIP_DEFS = {
@@ -87,8 +94,8 @@ export const TOOLTIP_DEFS = {
   },
 };
 
-const ICON_SIZE = 14; // radius-ish for drawShipIcon
-const ICON_AREA = 28; // px reserved for icon before name starts
+const ICON_SIZE = 14;
+const ICON_AREA = 28;
 
 export default class TooltipScene extends Phaser.Scene {
   constructor() {
@@ -99,55 +106,49 @@ export default class TooltipScene extends Phaser.Scene {
     const TW = 250;
     this._TW = TW;
 
+    // ── Unit tooltip container ────────────────────────────────────────────────
     this._container = this.add.container(0, 0).setVisible(false).setDepth(200);
 
-    // Background (redrawn each show)
-    this._bg = this.add.graphics();
-    this._container.add(this._bg);
+    this._bg       = this.add.graphics();
+    this._iconGfx  = this.add.graphics();
+    this._nameText = this.add.text(0, 0, '', { font: 'bold 13px monospace', color: '#44aaff' });
+    this._roleText = this.add.text(0, 0, '', { font: '10px monospace',      color: '#446688' });
+    this._descText = this.add.text(0, 0, '', { font: '10px monospace',      color: '#7a9aba', wordWrap: { width: TW - 24 } });
 
-    // Ship icon (redrawn each show via drawShipIcon)
-    this._iconGfx = this.add.graphics();
-    this._container.add(this._iconGfx);
-
-    // Name text — positioned after icon
-    this._nameText = this.add.text(0, 0, '', {
-      font: 'bold 13px monospace', color: '#44aaff',
-    });
-    this._container.add(this._nameText);
-
-    // Role subtitle
-    this._roleText = this.add.text(0, 0, '', {
-      font: '10px monospace', color: '#446688',
-    });
-    this._container.add(this._roleText);
-
-    // Stat rows (up to 3)
     this._statLabels = [];
     this._statValues = [];
     for (let i = 0; i < 3; i++) {
-      const lbl = this.add.text(0, 0, '', { font: '10px monospace', color: '#7799bb' });
-      const val = this.add.text(0, 0, '', { font: 'bold 10px monospace', color: '#aaccff' });
+      const lbl = this.add.text(0, 0, '', { font: '10px monospace',       color: '#7799bb' });
+      const val = this.add.text(0, 0, '', { font: 'bold 10px monospace',  color: '#aaccff' });
       this._statLabels.push(lbl);
       this._statValues.push(val);
-      this._container.add(lbl);
-      this._container.add(val);
     }
 
-    // Description
-    this._descText = this.add.text(0, 0, '', {
-      font: '10px monospace', color: '#7a9aba',
-      wordWrap: { width: TW - 24 },
-    });
-    this._container.add(this._descText);
+    // Add in draw order: bg first so all text renders on top
+    this._container.add([
+      this._bg, this._iconGfx,
+      this._nameText, this._roleText,
+      ...this._statLabels, ...this._statValues,
+      this._descText,
+    ]);
 
-    this.game.events.on('showTooltip', ({ key, x, y }) => {
-      this.scene.bringToTop(); // always render above every other scene
-      this._show(key, x, y);
+    // ── Perk panel container (rendered to the right) ──────────────────────────
+    this._perkContainer = this.add.container(0, 0).setVisible(false).setDepth(200);
+    this._perkBg        = this.add.graphics();
+    this._perkContainer.add(this._perkBg);
+    // Dynamic perk text objects are created/destroyed each show — stored here
+    this._perkTexts = [];
+
+    // ── Events ───────────────────────────────────────────────────────────────
+    this.game.events.on('showTooltip', ({ key, x, y, team, composition }) => {
+      this.scene.bringToTop();
+      this._show(key, x, y, team ?? null, composition ?? null);
     });
     this.game.events.on('hideTooltip', () => this._hide());
   }
 
-  _show(key, wx, wy) {
+  // ── Main show ─────────────────────────────────────────────────────────────
+  _show(key, wx, wy, team, composition) {
     const def = TOOLTIP_DEFS[key];
     if (!def) return;
 
@@ -156,10 +157,9 @@ export default class TooltipScene extends Phaser.Scene {
     const PAD = 12;
     const LINE = 16;
 
-    // Parse color once
     const colorInt = Phaser.Display.Color.HexStringToColor(def.color.replace('#', '')).color;
 
-    // ── Draw icon (top-left of header) ──────────────────────────────────
+    // ── Icon ─────────────────────────────────────────────────────────────────
     const iconCX = PAD + ICON_SIZE / 2;
     const iconCY = PAD + ICON_SIZE / 2 + 1;
     this._iconGfx.clear();
@@ -169,17 +169,10 @@ export default class TooltipScene extends Phaser.Scene {
       drawShipIcon(this._iconGfx, key, iconCX, iconCY, colorInt);
     }
 
-    // ── Position name beside icon with guaranteed gap ─────────────────────
-    this._nameText
-      .setText(def.name)
-      .setColor(def.color)
-      .setPosition(PAD + ICON_AREA, PAD);          // ICON_AREA=28px always clears icon
+    this._nameText.setText(def.name).setColor(def.color).setPosition(PAD + ICON_AREA, PAD);
+    this._roleText.setText(def.role.toUpperCase()).setPosition(PAD, PAD + 20);
 
-    this._roleText
-      .setText(def.role.toUpperCase())
-      .setPosition(PAD, PAD + 20);
-
-    // ── Stats ─────────────────────────────────────────────────────────────
+    // ── Stats ─────────────────────────────────────────────────────────────────
     const stats  = def.stats || [];
     const statsY = PAD + 40;
     for (let i = 0; i < 3; i++) {
@@ -192,35 +185,160 @@ export default class TooltipScene extends Phaser.Scene {
       }
     }
 
-    // ── Description ───────────────────────────────────────────────────────
+    // ── Description ───────────────────────────────────────────────────────────
     const descY = statsY + Math.max(1, stats.length) * LINE + 6;
     this._descText.setText(def.desc).setPosition(PAD, descY);
 
-    const dynH = descY + this._descText.height + PAD + 4;
+    const unitH = descY + this._descText.height + PAD + 4;
 
-    // ── Background ────────────────────────────────────────────────────────
+    // ── Unit tooltip background ────────────────────────────────────────────────
     this._bg.clear();
     this._bg.fillStyle(0x060b14, 0.96);
-    this._bg.fillRoundedRect(0, 0, TW, dynH, 6);
+    this._bg.fillRoundedRect(0, 0, TW, unitH, 6);
     this._bg.lineStyle(1, colorInt, 0.7);
-    this._bg.strokeRoundedRect(0, 0, TW, dynH, 6);
-    // Left accent bar
+    this._bg.strokeRoundedRect(0, 0, TW, unitH, 6);
     this._bg.fillStyle(colorInt, 0.85);
-    this._bg.fillRect(0, 0, 3, dynH);
-    // Divider under header
+    this._bg.fillRect(0, 0, 3, unitH);
     this._bg.lineStyle(1, 0x1a2a44, 0.8);
     this._bg.lineBetween(PAD, statsY - 4, TW - PAD, statsY - 4);
 
-    // ── Position tooltip (clamp to screen) ───────────────────────────────
+    // ── Position unit tooltip (clamp to screen) ───────────────────────────────
     let tx = wx + 12;
     let ty = wy + 12;
-    if (tx + TW  > width  - 8) tx = wx - TW  - 8;
-    if (ty + dynH > height - 8) ty = wy - dynH - 8;
-    this._container.setPosition(Math.max(4, tx), Math.max(4, ty));
-    this._container.setVisible(true);
+    if (ty + unitH > height - 8) ty = wy - unitH - 8;
+    if (tx + TW    > width  - 8) tx = wx - TW - 8;
+    tx = Math.max(4, tx);
+    ty = Math.max(4, ty);
+    this._container.setPosition(tx, ty).setVisible(true);
+
+    // ── Perk panel ────────────────────────────────────────────────────────────
+    const perks = this._getPerks(team, key, composition);
+    if (perks.length > 0) {
+      this._showPerkPanel(tx + TW + 6, ty, unitH, perks, width, height);
+    } else {
+      this._perkContainer.setVisible(false);
+    }
+  }
+
+  // ── Perk panel renderer ───────────────────────────────────────────────────
+  _showPerkPanel(preferX, anchorY, unitH, perks, screenW, screenH) {
+    const PW       = 270;  // wide enough for icon + name + wrapped desc
+    const PAD      = 10;
+    const ICON_COL = 24;   // px reserved for icon on the left of each row
+    const TITLE_H  = 22;
+    const NAME_H   = 13;
+    const ITEM_GAP = 8;
+    const ICON_COL_COLOR = 0x44aa22;
+
+    // Destroy old dynamic text/graphics objects
+    for (const t of this._perkTexts) t.destroy();
+    this._perkTexts = [];
+
+    // Pre-measure desc heights so we can calculate total panel height accurately
+    // Use a temporary off-screen text to measure (destroy immediately after)
+    const wrapW = PW - PAD - ICON_COL - PAD;
+    const measurer = this.add.text(-9999, -9999, '', {
+      font: '9px monospace', wordWrap: { width: wrapW },
+    });
+    const itemHeights = perks.map(p => {
+      measurer.setText(p.desc);
+      return NAME_H + measurer.height + ITEM_GAP;
+    });
+    measurer.destroy();
+
+    const totalItemH = itemHeights.reduce((s, h) => s + h, 0);
+    const panelH = PAD + TITLE_H + totalItemH + PAD;
+
+    // Clamp position
+    let px = preferX;
+    if (px + PW > screenW - 8) px = preferX - PW - this._TW - 12;
+    px = Math.max(4, px);
+    let py = anchorY;
+    if (py + panelH > screenH - 8) py = screenH - panelH - 8;
+    py = Math.max(4, py);
+
+    // Background
+    this._perkBg.clear();
+    this._perkBg.fillStyle(0x060b14, 0.96);
+    this._perkBg.fillRoundedRect(0, 0, PW, panelH, 6);
+    this._perkBg.lineStyle(1, 0x336622, 0.8);
+    this._perkBg.strokeRoundedRect(0, 0, PW, panelH, 6);
+    // Left accent bar
+    this._perkBg.fillStyle(ICON_COL_COLOR, 0.9);
+    this._perkBg.fillRect(0, 0, 3, panelH);
+
+    // Header
+    const header = this.add.text(PAD + 4, PAD, 'RESEARCH ACTIVE', {
+      font: 'bold 10px monospace', color: '#66cc44',
+    });
+    this._perkContainer.add(header);
+    this._perkTexts.push(header);
+
+    // Divider under header
+    const divG = this.add.graphics();
+    divG.lineStyle(1, 0x1a3a14, 0.8);
+    divG.lineBetween(PAD, PAD + TITLE_H - 4, PW - PAD, PAD + TITLE_H - 4);
+    this._perkContainer.add(divG);
+    this._perkTexts.push(divG);
+
+    // Perk rows
+    let ry = PAD + TITLE_H;
+    for (let i = 0; i < perks.length; i++) {
+      const perk   = perks[i];
+      const rowH   = itemHeights[i];
+      const iconFn = PERK_ICONS[perk.name];
+      const iconCX = PAD + ICON_COL / 2;
+      const iconCY = ry + NAME_H / 2 + 2;
+      const textX  = PAD + ICON_COL + 2;
+
+      // Icon graphic
+      const iconG = this.add.graphics();
+      if (iconFn) iconFn(iconG, iconCX, iconCY, 0x66cc44);
+      this._perkContainer.add(iconG);
+      this._perkTexts.push(iconG);
+
+      // Perk name
+      const nameT = this.add.text(textX, ry, perk.name, {
+        font: 'bold 10px monospace', color: '#88dd66',
+      });
+      // Perk description
+      const descT = this.add.text(textX, ry + NAME_H, perk.desc, {
+        font: '9px monospace', color: '#557744',
+        wordWrap: { width: wrapW },
+      });
+      this._perkContainer.add(nameT);
+      this._perkContainer.add(descT);
+      this._perkTexts.push(nameT, descT);
+
+      // Subtle row divider (skip after last item)
+      if (i < perks.length - 1) {
+        const rowDivG = this.add.graphics();
+        rowDivG.lineStyle(1, 0x0d2210, 0.6);
+        rowDivG.lineBetween(PAD, ry + rowH - ITEM_GAP / 2, PW - PAD, ry + rowH - ITEM_GAP / 2);
+        this._perkContainer.add(rowDivG);
+        this._perkTexts.push(rowDivG);
+      }
+
+      ry += rowH;
+    }
+
+    this._perkContainer.setPosition(px, py).setVisible(true);
+  }
+
+  // ── Query PerkManager (safe — returns [] if not available) ────────────────
+  _getPerks(team, shipType, composition) {
+    if (!team) return [];
+    try {
+      const gs = this.game.scene.getScene('GameScene');
+      if (!gs?.perkManager) return [];
+      return gs.perkManager.getPerksForUnit(team, shipType, composition) || [];
+    } catch {
+      return [];
+    }
   }
 
   _hide() {
     this._container.setVisible(false);
+    this._perkContainer.setVisible(false);
   }
 }

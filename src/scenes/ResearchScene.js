@@ -65,7 +65,7 @@ const SHIP_ICONS = {
 // ── Perk-specific icon draw functions ────────────────────────────────────────
 // Shared perk names (e.g. "Rapid Scramble") always use the same icon across trees.
 // Each function: (g, cx, cy, col) — draws into an existing graphics object.
-const PERK_ICONS = {
+export const PERK_ICONS = {
   // ── Shared cross-tree perks ──────────────────────────────────────────────
   // Rapid Scramble — lightning bolt (speed / launch rate)
   'Rapid Scramble':      (g, cx, cy, col) => {
@@ -542,7 +542,7 @@ const TREE_DEFS = [
             desc: 'Base fighter doctrine — standard scramble protocols, no special rules.', tested: true },
     pool: [
       { id: 'f_01', name: 'Rapid Scramble',     icon: PERK_ICONS['Rapid Scramble'],     desc: 'Fighters launch 30% faster from Naval Bases.' },
-      { id: 'f_02', name: 'Dense Formation',    icon: PERK_ICONS['Dense Formation'],    desc: 'Each Fighter gains +1 attack when stacked 5 or more.' },
+      { id: 'f_02', name: 'Dense Formation',    icon: PERK_ICONS['Dense Formation'],    desc: 'Each Fighter gains +1 attack damage.', tested: true },
       { id: 'f_03', name: 'Afterburner',        icon: PERK_ICONS['Afterburner'],        desc: 'Each Fighter increases stack movement speed by 2.5%.' },
       { id: 'f_04', name: 'Wingman Protocol',   icon: PERK_ICONS['Wingman Protocol'],   desc: 'Each Fighter has a 10% chance to dodge one hit per Main Strike phase.' },
       { id: 'f_05', name: 'Ace Pilots',         icon: PERK_ICONS['Ace Pilots'],         desc: 'Each Fighter deals double damage against Destroyers.' },
@@ -560,14 +560,14 @@ const TREE_DEFS = [
     root: { id: 'destroyer_root', name: 'Destroyer Wing',
             desc: 'Base destroyer doctrine — pre-strike kills 2 enemy fighters before combat.', tested: true },
     pool: [
-      { id: 'd_01', name: 'Improved Barrage',  icon: PERK_ICONS['Improved Barrage'],  desc: 'Pre-strike kills 3 Fighters instead of 2.' },
+      { id: 'd_01', name: 'Improved Barrage',  icon: PERK_ICONS['Improved Barrage'],  desc: 'Pre-strike kills 3 Fighters instead of 2.', tested: true },
       { id: 'd_02', name: 'Reinforced Hull',   icon: PERK_ICONS['Reinforced Hull'],   desc: 'Each Destroyer gains +10 HP.', tested: true },
       { id: 'd_03', name: 'Rapid Scramble',    icon: PERK_ICONS['Rapid Scramble'],    desc: 'Destroyers launch 30% faster from Destroyer Factories.' },
       { id: 'd_04', name: 'Hunter Protocol',   icon: PERK_ICONS['Hunter Protocol'],   desc: 'Each Destroyer deals +2 damage against Dreadnaughts and Flagships.' },
       { id: 'd_05', name: 'Torpedo Spread',    icon: PERK_ICONS['Torpedo Spread'],    desc: 'Each Destroyer Pre-Strike can hit non-Fighter ships for 15 damage.' },
       { id: 'd_06', name: 'Last Stand',        icon: PERK_ICONS['Last Stand'],        desc: 'Each Destroyer deals +2 damage when their stack is outnumbered.' },
       { id: 'd_07', name: 'Ace Pilots',        icon: PERK_ICONS['Ace Pilots'],        desc: 'Each Destroyer deals double damage against other Destroyers.' },
-      { id: 'd_08', name: 'Dense Formation',   icon: PERK_ICONS['Dense Formation'],   desc: 'Each Destroyer gains +1 attack when stacked 5 or more.' },
+      { id: 'd_08', name: 'Dense Formation',   icon: PERK_ICONS['Dense Formation'],   desc: 'Each Destroyer gains +1 attack damage.', tested: true },
       { id: 'd_09', name: 'Wingman Protocol',  icon: PERK_ICONS['Wingman Protocol'],  desc: 'Each Destroyer has a 10% chance to dodge one hit per Main Strike phase.' },
       { id: 'd_10', name: 'Hit and Run',       icon: PERK_ICONS['Hit and Run'],       desc: 'Destroyers may retreat after Pre-Strike without entering Main Strike.' },
     ],
@@ -617,7 +617,7 @@ const TREE_DEFS = [
     root: { id: 'flagship_root', name: 'Command Ship',
             desc: 'Command protocols — flagship is the last unit destroyed; losing it ends the game.', tested: true },
     pool: [
-      { id: 'fl_01', name: 'Command Aura',      icon: PERK_ICONS['Command Aura'],      desc: 'All ships in the Flagship\'s stack gain +1 attack.' },
+      { id: 'fl_01', name: 'Command Aura',      icon: PERK_ICONS['Command Aura'],      desc: 'All ships in the Flagship\'s stack gain +1 attack.', tested: true },
       { id: 'fl_02', name: 'Emergency Shield',  icon: PERK_ICONS['Emergency Shield'],  desc: 'Flagship survives one lethal hit per battle.' },
       { id: 'fl_03', name: 'Rally Beacon',      icon: PERK_ICONS['Rally Beacon'],      desc: 'Stacks containing a Flagship have movement speed increased by 50%.' },
       { id: 'fl_04', name: 'Reinforced Hull',   icon: PERK_ICONS['Reinforced Hull'],   desc: 'Each Flagship gains +50 HP.', tested: true },

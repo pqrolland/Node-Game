@@ -1,7 +1,7 @@
 import Unit, { emptyComposition, compositionTotal, dominantType } from '../units/Unit.js';
 import AsteroidManager from '../asteroids/AsteroidManager.js';
 import { generateMapForPlayers, buildAdjacency, findPath } from '../map/MapGraph.js';
-import CombatManager from '../combat/CombatManager.js';
+import CombatManager, { syncUnitHP } from '../combat/CombatManager.js';
 import PerkManager from '../perks/PerkManager.js';
 
 export default class GameScene extends Phaser.Scene {
@@ -50,6 +50,16 @@ export default class GameScene extends Phaser.Scene {
 
     // ── Asteroid manager ──────────────────────────────────────────────
     this.asteroidManager = new AsteroidManager(this, this._mapW, this._mapH, this.nodeMap);
+
+    // Activate pre-placed test buildings now that asteroidManager exists
+    if (this.testMode) {
+      for (const node of this._nodes) {
+        for (const bldId of node.buildings) {
+          if (bldId === '__planet__') continue;
+          this.handleBuildingAdded(node.id, bldId);
+        }
+      }
+    }
 
     // ── Asteroid click → open panel ───────────────────────────────────────
     this.game.events.on('openAsteroid', ({ asteroid }) => {
@@ -214,32 +224,59 @@ export default class GameScene extends Phaser.Scene {
 
   // ── Test environment map ──────────────────────────────────────────────────
   // 3 planets in a triangle. All produce 10/10/10.
-  //   test_player  — owned by player, no starting units, flagship for game rules
-  //   test_neutral — owned by neutral, 10 fighters
-  //   test_enemy   — owned by player2 (red), 10 fighters
+  //   test_player    — owned by player, flagship only
+  //   test_neutral   — owned by neutral, 10 fighters
+  //   test_enemy     — owned by player2 (red), 10 fighters
+  //   test_enemy_2   — owned by player2, naval_base (fighters)
+  //   test_enemy_3   — owned by player2, destroyer_factory
+  //   test_enemy_4   — owned by player2, cruiser_factory
+  //   test_enemy_5   — owned by player2, dreadnaught_factory
+  //   test_enemy_6   — owned by player2, flagship
+  //   All enemy planets connect to test_player
   _createTestMap() {
-    const CX = 640, CY = 340, R = 200;
-    const angles = [-Math.PI / 2, -Math.PI / 2 + (2 * Math.PI / 3), -Math.PI / 2 + (4 * Math.PI / 3)];
+    const CX = 640, CY = 360;
 
-    const makeNode = (id, label, angleIdx) => ({
+    const makeNode = (id, label, x, y, buildings = []) => ({
       id, label,
-      x: Math.round(CX + R * Math.cos(angles[angleIdx])),
-      y: Math.round(CY + R * Math.sin(angles[angleIdx])),
+      x: Math.round(x),
+      y: Math.round(y),
       food: 10, metal: 10, fuel: 10,
       baseFood: 10, baseMetal: 10, baseFuel: 10,
       type: 'habitable',
-      buildings: [],
+      buildings: ['__planet__', ...buildings],
     });
 
-    const playerNode  = makeNode('test_player',  'Test Base',   0);
-    const neutralNode = makeNode('test_neutral', 'Neutral',     1);
-    const enemyNode   = makeNode('test_enemy',   'Enemy Outpost', 2);
+    // Player at left-centre
+    const playerNode = makeNode('test_player', 'Test Base', 220, 360, ['asteroid_mine']);
 
-    this._nodes = [playerNode, neutralNode, enemyNode];
+    // Neutral: above-centre
+    const neutralNode = makeNode('test_neutral', 'Neutral', 540, 160, ['asteroid_mine']);
+
+    // Original enemy: below-centre
+    const enemyNode = makeNode('test_enemy', 'Fighter Outpost', 540, 560, ['asteroid_mine']);
+
+    // 5 new enemy planets arranged in a vertical column on the right side
+    const EX = 860; // shared X for the column
+    const enemyNode2 = makeNode('test_enemy_2', 'Naval Base',          EX, 160, ['naval_base',          'asteroid_mine']);
+    const enemyNode3 = makeNode('test_enemy_3', 'Destroyer Factory',   EX, 295, ['destroyer_factory',   'asteroid_mine']);
+    const enemyNode4 = makeNode('test_enemy_4', 'Cruiser Factory',     EX, 430, ['cruiser_factory',     'asteroid_mine']);
+    const enemyNode5 = makeNode('test_enemy_5', 'Dreadnaught Factory', EX, 565, ['dreadnaught_factory', 'asteroid_mine']);
+    const enemyNode6 = makeNode('test_enemy_6', 'Flagship Command',   1100, 360, ['asteroid_mine']);
+
+    this._nodes = [playerNode, neutralNode, enemyNode,
+                   enemyNode2, enemyNode3, enemyNode4, enemyNode5, enemyNode6];
+
     this._edges = [
-      { from: 'test_player', to: 'test_neutral' },
-      { from: 'test_player', to: 'test_enemy'   },
-      { from: 'test_neutral', to: 'test_enemy'  },
+      // Original triangle
+      { from: 'test_player',  to: 'test_neutral' },
+      { from: 'test_player',  to: 'test_enemy'   },
+      { from: 'test_neutral', to: 'test_enemy'   },
+      // All new enemy planets connect to player
+      { from: 'test_player',  to: 'test_enemy_2' },
+      { from: 'test_player',  to: 'test_enemy_3' },
+      { from: 'test_player',  to: 'test_enemy_4' },
+      { from: 'test_player',  to: 'test_enemy_5' },
+      { from: 'test_player',  to: 'test_enemy_6' },
     ];
     this._mapW = 1280;
     this._mapH = 720;
@@ -251,12 +288,17 @@ export default class GameScene extends Phaser.Scene {
     this.ownershipGfx = this.add.graphics().setDepth(4);
     this.drawMap();
 
-    // Player planet: no combat units — just flag ownership + flagship (hidden, required by game rules)
+    // Player: flagship only
     this.spawnStack('test_player',  'player',  0, { ...emptyComposition(), flagship: 1 });
-    // Neutral planet: 10 fighters
+    // Neutral: 10 fighters
     this.spawnStack('test_neutral', 'neutral', 0, { ...emptyComposition(), fighter: 10 });
-    // Enemy planet: 10 fighters, red team
+    // Enemy planets: various compositions
     this.spawnStack('test_enemy',   'player2', 0, { ...emptyComposition(), fighter: 10 });
+    this.spawnStack('test_enemy_2', 'player2', 0, { ...emptyComposition(), fighter: 5  });
+    this.spawnStack('test_enemy_3', 'player2', 0, { ...emptyComposition(), destroyer: 5 });
+    this.spawnStack('test_enemy_4', 'player2', 0, { ...emptyComposition(), cruiser: 5   });
+    this.spawnStack('test_enemy_5', 'player2', 0, { ...emptyComposition(), dreadnaught: 3 });
+    this.spawnStack('test_enemy_6', 'player2', 0, { ...emptyComposition(), flagship: 1  });
   }
 
   update(time, delta) {
@@ -768,9 +810,10 @@ export default class GameScene extends Phaser.Scene {
 
   _tickUnitProduction(delta) {
     this.unitProduction.forEach((prod, key) => {
-      const nodeId = prod.nodeId ?? key;  // support old naval_base key format
-      // Only produce for player-owned nodes
-      if (this.nodeOwnership.get(nodeId) !== 'player') return;
+      const nodeId = prod.nodeId ?? key;
+      const owner  = this.nodeOwnership.get(nodeId);
+      // Skip unowned and neutral nodes
+      if (!owner || owner === 'neutral') return;
 
       prod.elapsed += delta;
 
@@ -782,17 +825,18 @@ export default class GameScene extends Phaser.Scene {
       if (prod.elapsed >= prod.duration) {
         prod.elapsed -= prod.duration;
 
-        // Add one ship of the produced type to the largest idle stack, or spawn
         const shipType = prod.shipType || 'fighter';
         const node     = this.nodeMap.get(nodeId);
-        const stacks   = this.units.filter(u => u.team === 'player' && u.currentNode === nodeId && !u.isMoving);
+        const stacks   = this.units.filter(u => u.team === owner && u.currentNode === nodeId && !u.isMoving);
         if (stacks.length > 0) {
           stacks.sort((a, b) => b.stackSize - a.stackSize);
           stacks[0].composition[shipType] = (stacks[0].composition[shipType] || 0) + 1;
+          stacks[0].stackSize++;
           stacks[0].updateBadge();
+          syncUnitHP(stacks[0], this.perkManager);
         } else if (node) {
           const comp    = { ...emptyComposition(), [shipType]: 1 };
-          const newUnit = new Unit(this, node, 'player', 0, comp);
+          const newUnit = new Unit(this, node, owner, 0, comp);
           this.units.push(newUnit);
         }
         this.updateHUD();

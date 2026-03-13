@@ -196,7 +196,7 @@ export default class CombatScene extends Phaser.Scene {
       const hps = unit.unitHP?.[type];
       if (!hps || hps.length === 0) continue;
 
-      const maxHP    = SHIP_STATS[type].hp;
+      const maxHP    = unit.maxHP?.[type] ?? SHIP_STATS[type].hp;
       const count    = hps.length;
       const totalCur = hps.reduce((s, h) => s + h, 0);
       const totalMax = count * maxHP;
@@ -235,8 +235,10 @@ export default class CombatScene extends Phaser.Scene {
           .setDepth(PANEL_DEPTH + 3).setInteractive({ useHandCursor: false })
       );
       const capturedType = type;
+      const capturedTeam = unit.team;
+      const capturedComp = unit.composition;
       hoverZone.on('pointerover', () => {
-        this.game.events.emit('showTooltip', { key: capturedType, x: sx + colW + 4, y: rowY });
+        this.game.events.emit('showTooltip', { key: capturedType, x: sx + colW + 4, y: rowY, team: capturedTeam, composition: capturedComp });
       });
       hoverZone.on('pointerout', () => {
         this.game.events.emit('hideTooltip');
