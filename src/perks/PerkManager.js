@@ -63,7 +63,7 @@ export const PERK_CATALOGUE = {
   dr_06: { name: 'Wingman Protocol',   ships: ['dreadnaught'], desc: '10% chance to dodge one hit per Main Strike phase.' },
   dr_07: { name: 'Last Stand',         ships: ['dreadnaught'], desc: '+5 damage when the stack is outnumbered.' },
   dr_08: { name: 'Rapid Scramble',     ships: ['dreadnaught'], desc: 'Dreadnaughts launch 30% faster from Dreadnaught Factories.' },
-  dr_09: { name: 'First Strike',       ships: ['dreadnaught'], desc: 'Gains a Pre-Strike hit of 3 damage.' },
+  dr_09: { name: 'First Strike',       ships: ['dreadnaught'], desc: 'Gains a Pre-Strike hit of 5 damage.' },
   dr_10: { name: 'Living Fortress',    ships: ['dreadnaught'], desc: '+20 HP when defending a planet.' },
   // Flagship tree
   fl_01: { name: 'Command Aura',       ships: ['all'],         desc: 'All ships in this stack gain +1 attack damage.' },
@@ -206,28 +206,115 @@ export default class PerkManager {
   // Combat phase hooks
   // ══════════════════════════════════════════════════════════════════════════
 
+  // Phase 1: Anti-Fighter Barrage shot count (Improved Barrage)
   getBarrageShots(unit, baseShots) {
     if (!this._has(unit.team, 'd_01')) return baseShots;
     const destroyerCount = unit.unitHP?.destroyer?.filter(h => h > 0).length ?? 0;
     return destroyerCount * 3;
   }
 
-  buildAttackQueue(unit, baseQueue) {
+  // Phase 1: First Strike hits — returns [{ damage }] one entry per qualifying ship
+  getFirstStrikeHits(unit) {
+    const team = unit.team;
+    const hits = [];
+    if (this._has(team, 'f_08')) {
+      const count = unit.unitHP?.fighter?.filter(h => h > 0).length ?? 0;
+      for (let i = 0; i < count; i++) hits.push({ damage: 1 });
+    }
+    if (this._has(team, 'dr_09')) {
+      const count = unit.unitHP?.dreadnaught?.filter(h => h > 0).length ?? 0;
+      for (let i = 0; i < count; i++) hits.push({ damage: 5 });
+    }
+    if (this._has(team, 'fl_06')) {
+      const count = unit.unitHP?.flagship?.filter(h => h > 0).length ?? 0;
+      for (let i = 0; i < count; i++) hits.push({ damage: 20 });
+    }
+    return hits;
+  }
+
+  // Phase 3: Modify attack queue entries (damage bonuses per ship type)
+  // enemy is passed so Last Stand and Hunter Protocol can inspect enemy composition
+  buildAttackQueue(unit, enemy, baseQueue) {
     if (baseQueue.length === 0) return baseQueue;
     const team = unit.team;
+
+    // Outnumbered check for Last Stand perks
+    const myCount    = unit.stackSize  ?? 0;
+    const enemyCount = enemy?.stackSize ?? 0;
+    const outnumbered = myCount < enemyCount;
+
+    // Hunter Protocol: bonus if enemy has any dreadnaughts or flagships alive
+    const enemyHasHeavy = ((enemy?.unitHP?.dreadnaught?.filter(h => h > 0).length ?? 0) +
+                           (enemy?.unitHP?.flagship?.filter(h => h > 0).length ?? 0)) > 0;
+
+    // Pure-fighter check for Swarm Tactics
+    const pureFighters = unit.composition && SHIP_ORDER
+      .filter(t => t !== 'fighter')
+      .every(t => (unit.composition[t] || 0) === 0);
 
     return baseQueue.map(entry => {
       let dmg    = entry.damage;
       const type = entry.shipType;
 
+      // ── Existing perks ────────────────────────────────────────────────
       if (this._has(team, 'fl_01') && (unit.unitHP?.flagship?.filter(h => h > 0).length ?? 0) > 0) dmg += 1;
       if (type === 'fighter'   && this._has(team, 'f_02')) dmg += 1;
       if (type === 'destroyer' && this._has(team, 'd_08')) dmg += 1;
 
+      // ── New perks ─────────────────────────────────────────────────────
+      // Siege Cannons — Dreadnaught +5 damage
+      if (type === 'dreadnaught' && this._has(team, 'dr_01')) dmg += 5;
+
+      // Hunter Protocol — bonus vs Dreadnaughts / Flagships
+      if (enemyHasHeavy) {
+        if (type === 'destroyer' && this._has(team, 'd_04')) dmg += 2;
+        if (type === 'cruiser'   && this._has(team, 'c_06')) dmg += 5;
+        if (type === 'flagship'  && this._has(team, 'fl_08')) dmg += 15;
+      }
+
+      // Last Stand — bonus when outnumbered
+      if (outnumbered) {
+        if (type === 'destroyer' && this._has(team, 'd_06')) dmg += 2;
+        if (type === 'cruiser'   && this._has(team, 'c_10')) dmg += 2;
+        if (type === 'dreadnaught' && this._has(team, 'dr_07')) dmg += 5;
+        if (type === 'flagship'  && this._has(team, 'fl_05')) dmg += 10;
+      }
+
+      // Swarm Tactics — Fighter +1 when stack is pure fighters
+      if (type === 'fighter' && pureFighters && this._has(team, 'f_06')) dmg += 1;
+
       return { ...entry, damage: dmg };
+    }).flatMap(entry => {
+      // Last Stand Flagship — +1 extra attack when outnumbered
+      if (outnumbered && entry.shipType === 'flagship' && this._has(team, 'fl_05')) {
+        return [entry, { ...entry }];
+      }
+      return [entry];
     });
   }
 
+  // Phase 4: Wingman Protocol — roll dodge for each incoming hit on qualifying ships
+  // Returns { hits: filtered buffer, dodged: count, chance: probability used }
+  applyDodge(unit, incomingBuf) {
+    const team = unit.team;
+    const dodgeTypes = new Set();
+    if (this._has(team, 'f_04'))  dodgeTypes.add('fighter');
+    if (this._has(team, 'd_09'))  dodgeTypes.add('destroyer');
+    if (this._has(team, 'dr_06')) dodgeTypes.add('dreadnaught');
+
+    if (dodgeTypes.size === 0) return { hits: incomingBuf, dodged: 0, chance: 0 };
+
+    const DODGE_CHANCE = 0.10;
+    let dodged = 0;
+    const hits = incomingBuf.filter(hit => {
+      if (!dodgeTypes.has(hit.type)) return true; // non-dodge ship — always hits
+      if (Math.random() < DODGE_CHANCE) { dodged++; return false; }
+      return true;
+    });
+    return { hits, dodged, chance: DODGE_CHANCE };
+  }
+
+  // Phase 4: Field Medics — cruiser repair chance
   getRepairChance(unit, baseChance) {
     return this._has(unit.team, 'c_01') ? 0.65 : baseChance;
   }

@@ -136,7 +136,20 @@ export default class CombatManager {
     const nodeId  = defender.currentNode;
     const node    = this._scene.nodeMap.get(nodeId);
     const overlay = this._createOverlay(attacker, defender, node);
-    const battle  = { attacker, defender, nodeId, node, cooldownMs: 0, roundNumber: 0, overlay, log: [] };
+
+    // Snapshot starting compositions for battle history
+    const atkSnapshot = { ...attacker.composition };
+    const defSnapshot = { ...defender.composition };
+    const atkTeam     = attacker.team;
+    const defTeam     = defender.team;
+    const atkColor    = attacker.teamColorHex;
+    const defColor    = defender.teamColorHex;
+
+    const battle = {
+      attacker, defender, nodeId, node,
+      cooldownMs: 0, roundNumber: 0, overlay, log: [],
+      atkSnapshot, defSnapshot, atkTeam, defTeam, atkColor, defColor,
+    };
     this._battles.push(battle);
 
     overlay.hitZone.on('pointerdown', () => this._scene.game.events.emit('openCombat', { battle }));
@@ -190,9 +203,17 @@ export default class CombatManager {
     const atkBarrageBuf = _stageBarrage(atkBarrageShots, defender.unitHP);
     const defBarrageBuf = _stageBarrage(defBarrageShots, attacker.unitHP);
 
-    // Apply both buffers, prune dead, log results
+    // Perk hook: First Strike — each qualifying ship fires a pre-strike hit
+    const atkFirstStrike = this._perks?.getFirstStrikeHits(attacker) ?? [];
+    const defFirstStrike = this._perks?.getFirstStrikeHits(defender) ?? [];
+    const atkFSBuf = _stageFirstStrike(atkFirstStrike, defender.unitHP);
+    const defFSBuf = _stageFirstStrike(defFirstStrike, attacker.unitHP);
+
+    // Apply all pre-strike buffers, prune dead, log results
     _applyBuffer(atkBarrageBuf, defender.unitHP);
     _applyBuffer(defBarrageBuf, attacker.unitHP);
+    _applyBuffer(atkFSBuf, defender.unitHP);
+    _applyBuffer(defFSBuf, attacker.unitHP);
     _pruneHP(attacker.unitHP, attacker.composition); attacker.stackSize = _stackSize(attacker.composition);
     _pruneHP(defender.unitHP, defender.composition); defender.stackSize = _stackSize(defender.composition);
 
@@ -209,10 +230,22 @@ export default class CombatManager {
     if (atkBarrageBuf.length > 0 || defBarrageBuf.length > 0) {
       ui?.logEvent(`  ↳ Anti-Fighter Barrage: atk ${atkBarrageBuf.length} / def ${defBarrageBuf.length} fighters destroyed`);
     }
+    if (atkFSBuf.length > 0) {
+      const totalDmg = atkFSBuf.reduce((s, h) => s + h.damage, 0);
+      battle.log.push({ round: rnd, phase: 'prestrike',
+        text: `Atk [First Strike]: ${atkFirstStrike.length} ship(s) → ${totalDmg} dmg dealt`,
+        color: '#aa66ff' });
+    }
+    if (defFSBuf.length > 0) {
+      const totalDmg = defFSBuf.reduce((s, h) => s + h.damage, 0);
+      battle.log.push({ round: rnd, phase: 'prestrike',
+        text: `Def [First Strike]: ${defFirstStrike.length} ship(s) → ${totalDmg} dmg dealt`,
+        color: '#aa66ff' });
+    }
 
-    // Early exit if barrage ended the battle
+    // Early exit if pre-strike ended the battle
     if (!_anyAlive(attacker) || !_anyAlive(defender)) {
-      this._emitRoundUpdate(battle, ui, 0, 0, 0, 0, null, null);
+      this._emitRoundUpdate(battle, ui, 0, 0, 0, 0, null, null, null, null);
       return;
     }
 
@@ -224,17 +257,21 @@ export default class CombatManager {
     // Build attack queues from surviving ships (attacks-per-round entries each)
     const atkQueueBase = _buildAttackQueue(attacker.unitHP);
     const defQueueBase = _buildAttackQueue(defender.unitHP);
-    // Perk hook: Command Aura, Dense Formation may modify damage values
-    const atkQueue = this._perks?.buildAttackQueue(attacker, atkQueueBase) ?? atkQueueBase;
-    const defQueue = this._perks?.buildAttackQueue(defender, defQueueBase) ?? defQueueBase;
+    // Perk hook: Command Aura, Dense Formation, Siege Cannons, Last Stand, Swarm Tactics, Hunter Protocol
+    const atkQueue = this._perks?.buildAttackQueue(attacker, defender, atkQueueBase) ?? atkQueueBase;
+    const defQueue = this._perks?.buildAttackQueue(defender, attacker, defQueueBase) ?? defQueueBase;
 
     // Stage damage simultaneously — doomed ships excluded from further targeting
     const atkStrike = _stageDamage(atkQueue, defender.unitHP);
     const defStrike = _stageDamage(defQueue, attacker.unitHP);
 
     // ── Phase 4: Main Strike Resolution ──────────────────────────────────
-    _applyBuffer(atkStrike, defender.unitHP);
-    _applyBuffer(defStrike, attacker.unitHP);
+    // Perk hook: Wingman Protocol — apply dodge before damage lands
+    const atkDodge = this._perks?.applyDodge(attacker, defStrike) ?? { hits: defStrike, dodged: 0, chance: 0 };
+    const defDodge = this._perks?.applyDodge(defender, atkStrike) ?? { hits: atkStrike, dodged: 0, chance: 0 };
+
+    _applyBuffer(defDodge.hits, defender.unitHP);
+    _applyBuffer(atkDodge.hits, attacker.unitHP);
 
     // Prune dead ships; run cruiser repair for this phase only
     const atkRepairChance = this._perks?.getRepairChance(attacker, 0.5) ?? 0.5;
@@ -256,11 +293,13 @@ export default class CombatManager {
     this._emitRoundUpdate(battle, ui,
       atkQueue.length, defQueue.length,
       atkLost, defLost,
-      atkRepair, defRepair);
+      atkRepair, defRepair,
+      atkDodge, defDodge,
+      atkRepairChance, defRepairChance);
   }
 
   // ── Emit round update: write log entries then notify CombatScene ──────────
-  _emitRoundUpdate(battle, ui, atkQLen, defQLen, atkLost, defLost, atkRepair, defRepair) {
+  _emitRoundUpdate(battle, ui, atkQLen, defQLen, atkLost, defLost, atkRepair, defRepair, atkDodge, defDodge, atkRepairChance, defRepairChance) {
     const { attacker, defender } = battle;
     const rnd = battle.roundNumber;
     const aS  = attacker.stackSize;
@@ -278,14 +317,24 @@ export default class CombatManager {
       text: `Def [Main Strike]: ${defQLen} attack(s) → ${atkLost} destroyed (${aS} remain)`,
       color: '#44ddaa' });
 
-    // Cruiser repair log lines — after main strike lines
-    for (const [r, side] of [[atkRepair, 'Atk'], [defRepair, 'Def']]) {
+    // Wingman dodge log lines — only shown when at least one dodge occurred
+    for (const [d, side] of [[atkDodge, 'Atk'], [defDodge, 'Def']]) {
+      if (!d || d.dodged === 0) continue;
+      const total = d.dodged + (d.hits?.length ?? 0);
+      battle.log.push({ round: rnd, phase: 'resolution',
+        text: `🛡 ${side} [Wingman]: ${d.dodged}/${total} hit(s) dodged (${Math.round(d.chance * 100)}% chance)`,
+        color: '#66aaff' });
+    }
+
+    // Cruiser repair log lines — shows gross dead/repaired and chance for verification
+    for (const [r, side, chance] of [[atkRepair, 'Atk', atkRepairChance], [defRepair, 'Def', defRepairChance]]) {
       if (!r || r.dead === 0) continue;
+      const pct = chance != null ? ` (${Math.round(chance * 100)}% chance)` : '';
       if (r.repaired > 0) battle.log.push({ round: rnd, phase: 'resolution',
-        text: `🔧 ${side} [Main Strike Res.]: ${r.repaired}/${r.dead} cruiser(s) repaired`,
+        text: `🔧 ${side} [Main Strike Res.]: ${r.repaired}/${r.dead} cruiser(s) repaired${pct}`,
         color: '#44ddaa' });
       if (r.failed > 0) battle.log.push({ round: rnd, phase: 'resolution',
-        text: `✗ ${side} [Main Strike Res.]: ${r.failed}/${r.dead} repair failed`,
+        text: `✗ ${side} [Main Strike Res.]: ${r.failed}/${r.dead} repair failed${pct}`,
         color: '#664444' });
     }
 
@@ -344,6 +393,23 @@ export default class CombatManager {
       scene.updateOwnership(defender.currentNode);
     }
     scene.updateHUD();
+
+    // Archive completed battle for history log
+    if (!this.battleHistory) this.battleHistory = [];
+    this.battleHistory.push({
+      log:         battle.log,
+      nodeName:    battle.node?.label ?? battle.nodeId,
+      atkSnapshot: battle.atkSnapshot,
+      defSnapshot: battle.defSnapshot,
+      atkTeam:     battle.atkTeam,
+      defTeam:     battle.defTeam,
+      atkColor:    battle.atkColor,
+      defColor:    battle.defColor,
+      rounds:      battle.roundNumber,
+      outcome:     !atkAlive && !defAlive ? 'mutual' : !defAlive ? 'attacker' : 'defender',
+    });
+    this._scene.game.events.emit('battleHistoryUpdated', { history: this.battleHistory });
+
     this._battles.splice(idx, 1);
   }
 
@@ -440,6 +506,27 @@ export default class CombatManager {
 // These operate on raw unitHP objects and composition maps, not unit instances.
 // This makes them easy to test, reason about, and reuse for perk hooks.
 // ══════════════════════════════════════════════════════════════════════════════
+
+// Build a damage buffer for First Strike hits.
+// hits: [{ damage }] — one entry per qualifying ship, from perk hook.
+// Each hit targets a random living enemy ship.
+// Returns [{ type, idx, damage }]
+function _stageFirstStrike(hits, targetHP) {
+  const buf = [];
+  for (const hit of hits) {
+    const viable = [];
+    for (const type of SHIP_ORDER) {
+      const hps = targetHP[type] || [];
+      for (let i = 0; i < hps.length; i++) {
+        if (hps[i] > 0) viable.push({ type, idx: i });
+      }
+    }
+    if (!viable.length) break;
+    const t = viable[Math.floor(Math.random() * viable.length)];
+    buf.push({ type: t.type, idx: t.idx, damage: hit.damage });
+  }
+  return buf;
+}
 
 // Build a damage buffer for Anti-Fighter Barrage.
 // Each destroyer fires BARRAGE_SHOTS_PER_DESTROYER shots at distinct fighters.
