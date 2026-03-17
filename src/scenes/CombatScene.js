@@ -58,6 +58,9 @@ export default class CombatScene extends Phaser.Scene {
     this._historyOpen    = false;
     this._histBtn        = null;
     this._histBadge      = null;
+    this._liveWheelFn    = null;   // scene-level wheel handler for live log
+    this._histWheelFn    = null;   // scene-level wheel handler for history log
+    this._histScrollOffset = 0;   // scroll offset for history log
   }
 
   create() {
@@ -193,6 +196,7 @@ export default class CombatScene extends Phaser.Scene {
   }
 
   _closeHistory() {
+    if (this._histWheelFn) { this.input.off('wheel', this._histWheelFn); this._histWheelFn = null; }
     this._historyObjs.forEach(o => o?.destroy());
     this._historyObjs = [];
     this._historyOpen = false;
@@ -287,8 +291,9 @@ export default class CombatScene extends Phaser.Scene {
     const logBottom = py + PH - (this._history.length > 1 ? 30 : 10);
     const logH      = logBottom - logTop;
     if (!record.verboseRounds) record.verboseRounds = new Set();
-    this._drawScrollableLog(
-      record.log, px + 12, logTop, PW - 24, logH, dep + 1, add, `hist_${idx}`, 0,
+    if (!record.scrollOffset) record.scrollOffset = 0;
+    const histBounds = this._drawScrollableLog(
+      record.log, px + 12, logTop, PW - 24, logH, dep + 1, add, `hist_${idx}`, record.scrollOffset,
       null,
       record.verboseRounds,
       (round) => {
@@ -297,6 +302,20 @@ export default class CombatScene extends Phaser.Scene {
         this._drawHistoryPanel(record, idx);
       }
     );
+
+    // Scene-level wheel listener for history log
+    if (this._histWheelFn) this.input.off('wheel', this._histWheelFn);
+    if (histBounds?.maxScroll > 0) {
+      this._histWheelFn = (ptr, _o, _dx, dy) => {
+        if (ptr.x >= px + 12 && ptr.x <= px + PW - 12 && ptr.y >= logTop && ptr.y <= logTop + logH) {
+          record.scrollOffset = Math.max(0, Math.min(histBounds.maxScroll, record.scrollOffset - dy * 0.5));
+          this._drawHistoryPanel(record, idx);
+        }
+      };
+      this.input.on('wheel', this._histWheelFn);
+    } else {
+      this._histWheelFn = null;
+    }
   }
 
   // ── Open ──────────────────────────────────────────────────────────────────
@@ -385,10 +404,10 @@ export default class CombatScene extends Phaser.Scene {
     const logW = LOG_W - 16;
     const logH = H - 44;
     if (!this._battle.verboseRounds) this._battle.verboseRounds = new Set();
-    this._drawScrollableLog(
+    const logBounds = this._drawScrollableLog(
       this._battle.log, logX, logY, logW, logH,
       PANEL_DEPTH + 1, add, 'live', this._scrollOffset,
-      (newOffset) => { this._scrollOffset = newOffset; this._redraw(); },
+      null,
       this._battle.verboseRounds,
       (round) => {
         if (this._battle.verboseRounds.has(round)) this._battle.verboseRounds.delete(round);
@@ -396,6 +415,21 @@ export default class CombatScene extends Phaser.Scene {
         this._redraw();
       }
     );
+
+    // Scene-level wheel listener for live log — works regardless of what's under cursor
+    if (this._liveWheelFn) this.input.off('wheel', this._liveWheelFn);
+    if (logBounds?.maxScroll > 0) {
+      this._liveWheelFn = (ptr, _o, _dx, dy) => {
+        if (ptr.x >= logX && ptr.x <= logX + logW && ptr.y >= logY && ptr.y <= logY + logH) {
+          // scrollOffset=0 is pinned to bottom; positive = scrolled up. Scroll up (dy<0) increases offset.
+          this._scrollOffset = Math.max(0, Math.min(logBounds.maxScroll, this._scrollOffset - dy * 0.5));
+          this._redraw();
+        }
+      };
+      this.input.on('wheel', this._liveWheelFn);
+    } else {
+      this._liveWheelFn = null;
+    }
   }
 
   // ── Scrollable log renderer ───────────────────────────────────────────────
@@ -479,7 +513,7 @@ export default class CombatScene extends Phaser.Scene {
       virtualY += line.h + LINE_GAP;
     }
 
-    // Scrollbar
+    // Scrollbar — visual only, callers attach wheel via scene-level listener
     if (maxScroll > 0) {
       const trackX = lx + lw - 6;
       const trackG = add(this.add.graphics().setDepth(depth));
@@ -490,16 +524,9 @@ export default class CombatScene extends Phaser.Scene {
       const thumbY     = ly + Math.round(thumbRange * (1 - clampedOffset / maxScroll));
       trackG.fillStyle(0x2255aa, 0.8);
       trackG.fillRoundedRect(R(trackX), R(thumbY), 4, thumbH, 2);
-
-      if (onScroll) {
-        const zone = add(this.add.rectangle(R(lx + lw / 2), R(ly + lh / 2), lw, lh, 0xffffff, 0)
-          .setDepth(depth + 1).setInteractive());
-        zone.on('wheel', (_ptr, _objs, _dx, dy) => {
-          const newOffset = Math.max(0, Math.min(maxScroll, clampedOffset + dy * 0.5));
-          onScroll(newOffset);
-        });
-      }
     }
+
+    return { lx, ly, lw, lh, maxScroll, clampedOffset };
   }
 
   // ── HP side panel ─────────────────────────────────────────────────────────
@@ -581,6 +608,7 @@ export default class CombatScene extends Phaser.Scene {
 
   // ── Close ─────────────────────────────────────────────────────────────────
   _close() {
+    if (this._liveWheelFn) { this.input.off('wheel', this._liveWheelFn); this._liveWheelFn = null; }
     this._objs.forEach(o => o?.destroy());
     this._objs           = [];
     this._battle         = null;

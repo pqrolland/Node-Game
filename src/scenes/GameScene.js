@@ -102,6 +102,8 @@ export default class GameScene extends Phaser.Scene {
       false    // emitOnRepeat
     );
     this.input.on('wheel', (ptr, objs, dx, dy) => {
+      const combat = this.scene.get('CombatScene');
+      if (combat?._open || combat?._historyOpen) return;
       const zoom = Phaser.Math.Clamp(this.cameras.main.zoom - dy * 0.001, 0.6, 2);
       this.cameras.main.setZoom(zoom);
     });

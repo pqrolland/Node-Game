@@ -227,6 +227,20 @@ export default class CombatManager {
     _pruneHP(attacker.unitHP, attacker.composition); attacker.stackSize = _stackSize(attacker.composition);
     _pruneHP(defender.unitHP, defender.composition); defender.stackSize = _stackSize(defender.composition);
 
+    // Verbose entries for pre-strike
+    for (const hit of atkBarrageBuf) battle.log.push({ round: rnd, phase: 'verbose',
+      text: `  Atk destroyer [${atkTorpedo ? 'Torpedo' : 'Barrage'}] → Def ${hit.type} #${hit.idx + 1}: ${hit.damage} dmg`,
+      color: '#553366' });
+    for (const hit of defBarrageBuf) battle.log.push({ round: rnd, phase: 'verbose',
+      text: `  Def destroyer [${defTorpedo ? 'Torpedo' : 'Barrage'}] → Atk ${hit.type} #${hit.idx + 1}: ${hit.damage} dmg`,
+      color: '#553366' });
+    for (const [buf, side, label] of [[atkFSBuf, 'Atk', 'First Strike'], [defFSBuf, 'Def', 'First Strike'],
+                                       [atkOrbitalBuf, 'Atk', 'Orbital Strike'], [defOrbitalBuf, 'Def', 'Orbital Strike']]) {
+      for (const hit of buf) battle.log.push({ round: rnd, phase: 'verbose',
+        text: `  ${side} [${label}] → ${side === 'Atk' ? 'Def' : 'Atk'} ${hit.type} #${hit.idx + 1}: ${hit.damage} dmg`,
+        color: '#553366' });
+    }
+
     if (atkBarrageBuf.length > 0) {
       const label = atkTorpedo ? 'Torpedo Spread' : 'Pre-Strike';
       const destroyerCount = atkBarrageShots / BARRAGE_SHOTS_PER_DESTROYER | 0;
@@ -329,15 +343,32 @@ export default class CombatManager {
     _applyBuffer(atkKamikazeBuf, defender.unitHP);
     _applyBuffer(defKamikazeBuf, attacker.unitHP);
 
+    // Verbose entries for resolution phase
+    // Wingman dodges
+    for (const [d, side, tgt] of [[atkDodge, 'Atk', 'Atk'], [defDodge, 'Def', 'Def']]) {
+      if (!d || d.dodged === 0) continue;
+      battle.log.push({ round: rnd, phase: 'verbose',
+        text: `  ${side} [Wingman]: ${d.dodged} hit(s) dodged`,
+        color: '#334466' });
+    }
+    // Kamikaze retaliatory hits
+    for (const [buf, side] of [[atkKamikazeBuf, 'Atk'], [defKamikazeBuf, 'Def']]) {
+      for (const hit of buf) battle.log.push({ round: rnd, phase: 'verbose',
+        text: `  ${side} fighter [Kamikaze] → ${side === 'Atk' ? 'Def' : 'Atk'} ${hit.type} #${hit.idx + 1}: ${hit.damage} dmg`,
+        color: '#553322' });
+    }
+
     // Prune dead ships; run cruiser repair for this phase only
     const atkRepairChance = this._perks?.getRepairChance(attacker, 0.5) ?? 0.5;
     const defRepairChance = this._perks?.getRepairChance(defender, 0.5) ?? 0.5;
-    const atkRepair = _pruneHPWithRepair(attacker.unitHP, attacker.composition, atkRepairChance, attacker.maxHP);
-    const defRepair = _pruneHPWithRepair(defender.unitHP, defender.composition, defRepairChance, defender.maxHP);
 
-    // Perk hook: Nanite Repair — damaged-but-alive cruisers roll 30% heal to full
+    // Perk hook: Nanite Repair — runs BEFORE pruning so it can heal damaged (hp>0) cruisers
+    // that took damage this round but weren't killed. After pruning, dead ships are gone.
     const atkNanite = this._perks?.applyNaniteRepair(attacker) ?? { healed: 0, eligible: 0 };
     const defNanite = this._perks?.applyNaniteRepair(defender) ?? { healed: 0, eligible: 0 };
+
+    const atkRepair = _pruneHPWithRepair(attacker.unitHP, attacker.composition, atkRepairChance, attacker.maxHP);
+    const defRepair = _pruneHPWithRepair(defender.unitHP, defender.composition, defRepairChance, defender.maxHP);
 
     attacker.stackSize = _stackSize(attacker.composition);
     defender.stackSize = _stackSize(defender.composition);
@@ -389,37 +420,31 @@ export default class CombatManager {
         color: '#66aaff' });
     }
 
-    // Kamikaze Protocol — only log when at least one fighter actually retaliated
+    // Kamikaze Protocol — log whenever fighters died (shows 0/N when none triggered)
     for (const [k, side] of [[atkKamikaze, 'Atk'], [defKamikaze, 'Def']]) {
-      if (!k || !k.triggered) continue;
+      if (!k || (k.total ?? 0) === 0) continue;
       const pct = Math.round((k.chance ?? 0.5) * 100);
       battle.log.push({ round: rnd, phase: 'resolution',
         text: `💥 ${side} [Kamikaze]: ${k.triggered}/${k.total ?? 0} fighter(s) retaliated (${pct}% chance)`,
-        color: '#ff8844' });
+        color: k.triggered > 0 ? '#ff8844' : '#664433' });
     }
 
-    // Cruiser repair (dead → respawn)
+    // Cruiser repair (dead → respawn) — only log successes
     for (const [r, side, chance] of [[atkRepair, 'Atk', atkRepairChance], [defRepair, 'Def', defRepairChance]]) {
       if (!r || r.dead === 0) continue;
       const pct = chance != null ? ` (${Math.round(chance * 100)}% chance)` : '';
       if (r.repaired > 0) battle.log.push({ round: rnd, phase: 'resolution',
-        text: `🔧 ${side} [Main Strike Res.]: ${r.repaired}/${r.dead} cruiser(s) repaired${pct}`,
+        text: `🔧 ${side} [Cruiser Repair]: ${r.repaired}/${r.dead} destroyed cruiser(s) returned${pct}`,
         color: '#44ddaa' });
-      if (r.failed > 0) battle.log.push({ round: rnd, phase: 'resolution',
-        text: `✗ ${side} [Main Strike Res.]: ${r.failed}/${r.dead} repair failed${pct}`,
-        color: '#664444' });
     }
 
-    // Nanite Repair (damaged → full heal)
+    // Nanite Repair (damaged → full heal) — only log successes
     for (const [n, side] of [[atkNanite, 'Atk'], [defNanite, 'Def']]) {
-      if (!n || n.eligible === 0) continue;
+      if (!n || n.eligible === 0 || n.healed === 0) continue;
       const pct = Math.round((n.chance ?? 0.30) * 100);
-      if (n.healed > 0) battle.log.push({ round: rnd, phase: 'resolution',
+      battle.log.push({ round: rnd, phase: 'resolution',
         text: `🧬 ${side} [Nanite Repair]: ${n.healed}/${n.eligible} damaged cruiser(s) restored (${pct}% chance)`,
         color: '#44ddaa' });
-      if (n.healed < n.eligible) battle.log.push({ round: rnd, phase: 'resolution',
-        text: `✗ ${side} [Nanite Repair]: ${n.eligible - n.healed}/${n.eligible} nanite repair failed (${pct}% chance)`,
-        color: '#664444' });
     }
 
     // Notify CombatScene

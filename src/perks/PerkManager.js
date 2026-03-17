@@ -218,11 +218,12 @@ export default class PerkManager {
     return this._has(unit.team, 'd_05');
   }
 
-  // Phase 1: Orbital Strike — returns total damage to spread across ALL enemy ships
-  // Each living dreadnaught contributes 5 damage applied to every enemy ship.
+  // Phase 1: Orbital Strike — the stack deals 5 Pre-Strike damage to EVERY enemy ship.
+  // Returns flat 5 (or 0 if not unlocked), regardless of dreadnaught count.
   getOrbitalStrikeDamage(unit) {
     if (!this._has(unit.team, 'dr_03')) return 0;
-    return (unit.unitHP?.dreadnaught?.filter(h => h > 0).length ?? 0) * 5;
+    if ((unit.unitHP?.dreadnaught?.filter(h => h > 0).length ?? 0) === 0) return 0;
+    return 5;
   }
 
   // Phase 1: First Strike hits — returns [{ damage }] one entry per qualifying ship
