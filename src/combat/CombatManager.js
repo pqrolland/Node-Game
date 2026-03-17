@@ -293,6 +293,18 @@ export default class CombatManager {
     const atkStrike = _stageDamage(atkQueue, defender.unitHP);
     const defStrike = _stageDamage(defQueue, attacker.unitHP);
 
+    // Always store verbose hit entries — rendering is gated by battle.verboseLog in CombatScene
+    for (const hit of atkStrike) {
+      battle.log.push({ round: rnd, phase: 'verbose',
+        text: `  Atk ${hit.atkType} #${hit.atkIdx} → Def ${hit.type} #${hit.idx + 1}: ${hit.damage} dmg`,
+        color: '#336644' });
+    }
+    for (const hit of defStrike) {
+      battle.log.push({ round: rnd, phase: 'verbose',
+        text: `  Def ${hit.atkType} #${hit.atkIdx} → Atk ${hit.type} #${hit.idx + 1}: ${hit.damage} dmg`,
+        color: '#334466' });
+    }
+
     // ── Phase 4: Main Strike Resolution ──────────────────────────────────
     // Perk hook: Wingman Protocol — apply dodge before damage lands
     const atkDodge = this._perks?.applyDodge(attacker, defStrike) ?? { hits: defStrike, dodged: 0, chance: 0 };
@@ -469,16 +481,17 @@ export default class CombatManager {
     // Archive completed battle for history log
     if (!this.battleHistory) this.battleHistory = [];
     this.battleHistory.push({
-      log:         battle.log,
-      nodeName:    battle.node?.label ?? battle.nodeId,
-      atkSnapshot: battle.atkSnapshot,
-      defSnapshot: battle.defSnapshot,
-      atkTeam:     battle.atkTeam,
-      defTeam:     battle.defTeam,
-      atkColor:    battle.atkColor,
-      defColor:    battle.defColor,
-      rounds:      battle.roundNumber,
-      outcome:     !atkAlive && !defAlive ? 'mutual' : !defAlive ? 'attacker' : 'defender',
+      log:           battle.log,
+      verboseRounds: battle.verboseRounds ?? new Set(),
+      nodeName:      battle.node?.label ?? battle.nodeId,
+      atkSnapshot:   battle.atkSnapshot,
+      defSnapshot:   battle.defSnapshot,
+      atkTeam:       battle.atkTeam,
+      defTeam:       battle.defTeam,
+      atkColor:      battle.atkColor,
+      defColor:      battle.defColor,
+      rounds:        battle.roundNumber,
+      outcome:       !atkAlive && !defAlive ? 'mutual' : !defAlive ? 'attacker' : 'defender',
     });
     this._scene.game.events.emit('battleHistoryUpdated', { history: this.battleHistory });
 
@@ -659,7 +672,8 @@ function _stageBarrage(totalShots, targetHP, torpedoSpread = false) {
 
 // Build a main-strike attack queue from a unit's HP pool.
 // Each living ship contributes (attacks-per-round) entries at (damage-per-attack).
-// Returns [{ shipType, damage }]
+// shipIdx is the position of the ship within its type array (for verbose logging).
+// Returns [{ shipType, shipIdx, damage }]
 function _buildAttackQueue(unitHP) {
   const q = [];
   for (const type of SHIP_ORDER) {
@@ -667,7 +681,7 @@ function _buildAttackQueue(unitHP) {
     const stat = SHIP_STATS[type];
     for (let i = 0; i < hps.length; i++) {
       if (hps[i] > 0) {
-        for (let a = 0; a < stat.attacks; a++) q.push({ shipType: type, damage: stat.damage });
+        for (let a = 0; a < stat.attacks; a++) q.push({ shipType: type, shipIdx: i + 1, damage: stat.damage });
       }
     }
   }
@@ -678,7 +692,7 @@ function _buildAttackQueue(unitHP) {
 // Tracks effective HP (actual HP minus already-staged hits) per target.
 // Ships whose effective HP reaches 0 are removed from the viable target pool
 // so no damage is wasted on already-doomed ships.
-// Returns [{ type, idx, damage }]
+// Returns [{ atkType, atkIdx, type, idx, damage }]
 function _stageDamage(attackQueue, targetHP) {
   const buf       = [];
   const stagedDmg = {}; // 'type:idx' → total damage staged so far
@@ -698,7 +712,7 @@ function _stageDamage(attackQueue, targetHP) {
 
     const t = viable[Math.floor(Math.random() * viable.length)];
     stagedDmg[t.key] = (stagedDmg[t.key] || 0) + atk.damage;
-    buf.push({ type: t.type, idx: t.idx, damage: atk.damage });
+    buf.push({ atkType: atk.shipType, atkIdx: atk.shipIdx, type: t.type, idx: t.idx, damage: atk.damage });
   }
   return buf;
 }

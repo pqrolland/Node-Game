@@ -274,22 +274,51 @@ Each tooltip shows the unit's icon, role, real HP/damage/attack stats, any speci
 
 ## 🔬 Research
 
-Access the **Research** overlay via the **RESEARCH** button in the top HUD. Spend **Research Points** (accumulated passively) to unlock perks across 8 trees.
+Access the **Research** overlay via the **RESEARCH** button in the top HUD. Spend **Research Points** (accumulated passively, +2 per tick) to unlock perks across 8 trees. Each run randomly selects 6 perks per tree from a pool of 10, keeping each game strategically distinct.
 
-### Tested & Active Perks
+In **Test Environment** mode, a side panel lists all 80 perks and lets you unlock any of them instantly in any order.
+
+### ✅ Tested & Active Perks
+
+| Perk | Trees | Effect |
+|---|---|---|
+| **Reinforced Hull** | Destroyer / Cruiser / Dreadnaught / Flagship | +10 HP per Destroyer, +10 per Cruiser, +15 per Dreadnaught, +50 per Flagship |
+| **Dense Formation** | Fighter / Destroyer | Each ship of that type gains +1 attack damage |
+| **Improved Barrage** | Destroyer | Pre-Strike fires 3 shots per Destroyer instead of 2 |
+| **Swarm Tactics** | Fighter | Each Fighter gains +1 attack when stack contains only Fighters |
+| **Command Aura** | Flagship | All ships in the Flagship's stack gain +1 attack damage |
+| **Field Medics** | Cruiser | Cruiser repair chance increases from 50% to 65% |
+| **Siege Cannons** | Dreadnaught | Each Dreadnaught gains +5 damage per attack |
+| **Wingman Protocol** | Fighter / Destroyer / Dreadnaught | 10% chance to dodge each incoming hit per Main Strike phase |
+| **Hunter Protocol** | Destroyer / Cruiser / Flagship | Bonus damage vs Dreadnaughts and Flagships (+2 / +5 / +15) |
+| **Last Stand** | Destroyer / Cruiser / Dreadnaught / Flagship | Bonus damage when outnumbered (+2 / +2 / +5 / +10 dmg, Flagship also gains +1 attack) |
+| **First Strike** | Fighter / Dreadnaught / Flagship | Pre-Strike hit before main combat (1 / 5 / 20 damage per ship) |
+
+### ⚗ Implemented — Ready to Test
 
 | Perk | Tree | Effect |
 |---|---|---|
-| **Reinforced Hull** | Fighter / Destroyer / Cruiser / Dreadnaught / Flagship | Increases max HP per ship (+10 Destroyer, +10 Cruiser, +15 Dreadnaught, +50 Flagship) |
-| **Improved Barrage** | Destroyer | Pre-strike fires 3 shots per Destroyer instead of 2 |
-| **Dense Formation** | Fighter / Destroyer | Each ship of that type gains +1 attack damage |
-| **Command Aura** | Flagship | All ships in the Flagship's stack gain +1 attack damage |
+| **Ace Pilots** | Fighter / Destroyer / Cruiser | Double damage when enemy has Destroyers alive |
+| **Orbital Strike** | Dreadnaught | Each Dreadnaught deals 5 Pre-Strike damage to every enemy ship |
+| **Torpedo Spread** | Destroyer | Pre-Strike barrage expands to hit all ship types (15 dmg/shot) instead of fighters only |
+| **Kamikaze Protocol** | Fighter | Each Fighter destroyed in Main Strike has a 50% chance to retaliate for full damage |
+| **Nanite Repair** | Cruiser | Damaged (not destroyed) Cruisers have a 30% chance to restore to full HP each phase |
 
-### In Development (not yet active)
-- **Field Medics** (Cruiser) — repair chance 50% → 65%
-- 75 further perks across all 8 trees
+### ✕ Not Yet Implemented
+55 further perks across all 8 trees — shown with a red **✕** badge in the Research overlay.
 
-Perks shown with a red **✕** badge in the Research overlay are not yet implemented.
+---
+
+## ⚔ Combat Log
+
+The Combat Window (open during any battle via the overlay, or post-battle via the 📋 history button) shows a full round-by-round log. Each round's entry includes a **▶ Show hit detail** link that expands to per-hit verbose output:
+
+```
+  Atk fighter #3 → Def destroyer #1: 6 dmg
+  Def cruiser #2 → Atk fighter #5: 10 dmg
+```
+
+Multiple rounds can be expanded simultaneously. The log and its expanded state persist in the battle history.
 
 ---
 
@@ -299,8 +328,8 @@ Perks shown with a red **✕** badge in the Research overlay are not yet impleme
 Make each playthrough strategically distinct before adding players.
 
 | Feature | Status | Notes |
-|---|---|---|\n| Research Tree | ✅ In Progress | 80 perks across 8 trees. 5 perks tested & active. Pool-based RP spending. |
-| Ship Upgrades | ✅ In Progress | Reinforced Hull (+HP), Dense Formation (+dmg), Improved Barrage, Command Aura all live. |
+|---|---|---|\n| Research Tree | ✅ In Progress | 80 perks across 8 trees. 16 tested & active, 5 awaiting test. Pool-based RP spending. |
+| Ship Upgrades | ✅ In Progress | 21 combat perks live across all ship types. |
 | Building Upgrades + Planetary Power | Planned | Energy capacity per planet forces meaningful build decisions. |
 | Missile Carriers | Planned | Ranged unit using the existing projectile system. New combat dimension. |
 | Planetary Defense | Planned | Building with intercept radius. Counters missile carriers and meteors. |

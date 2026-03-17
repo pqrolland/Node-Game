@@ -286,7 +286,17 @@ export default class CombatScene extends Phaser.Scene {
     const logTop    = py + 82;
     const logBottom = py + PH - (this._history.length > 1 ? 30 : 10);
     const logH      = logBottom - logTop;
-    this._drawScrollableLog(record.log, px + 12, logTop, PW - 24, logH, dep + 1, add, `hist_${idx}`, 0);
+    if (!record.verboseRounds) record.verboseRounds = new Set();
+    this._drawScrollableLog(
+      record.log, px + 12, logTop, PW - 24, logH, dep + 1, add, `hist_${idx}`, 0,
+      null,
+      record.verboseRounds,
+      (round) => {
+        if (record.verboseRounds.has(round)) record.verboseRounds.delete(round);
+        else record.verboseRounds.add(round);
+        this._drawHistoryPanel(record, idx);
+      }
+    );
   }
 
   // ── Open ──────────────────────────────────────────────────────────────────
@@ -374,28 +384,53 @@ export default class CombatScene extends Phaser.Scene {
     const logY = py + 32;
     const logW = LOG_W - 16;
     const logH = H - 44;
+    if (!this._battle.verboseRounds) this._battle.verboseRounds = new Set();
     this._drawScrollableLog(
       this._battle.log, logX, logY, logW, logH,
       PANEL_DEPTH + 1, add, 'live', this._scrollOffset,
-      (newOffset) => { this._scrollOffset = newOffset; this._redraw(); }
+      (newOffset) => { this._scrollOffset = newOffset; this._redraw(); },
+      this._battle.verboseRounds,
+      (round) => {
+        if (this._battle.verboseRounds.has(round)) this._battle.verboseRounds.delete(round);
+        else this._battle.verboseRounds.add(round);
+        this._redraw();
+      }
     );
   }
 
   // ── Scrollable log renderer ───────────────────────────────────────────────
-  // Renders log entries clipped to [lx, ly, lw, lh].
-  // scrollOffset = px scrolled up from the bottom (0 = pinned to latest).
-  // onScroll callback receives new offset when scroll wheel used.
-  _drawScrollableLog(log, lx, ly, lw, lh, depth, add, key, scrollOffset, onScroll) {
+  // log: array of { round, phase, text, color }
+  // verboseLog: Set of round numbers to show verbose entries for (or null = none)
+  // onToggleVerbose(round): callback when user clicks a round's verbose toggle
+  _drawScrollableLog(log, lx, ly, lw, lh, depth, add, key, scrollOffset, onScroll, verboseLog, onToggleVerbose) {
     const R = (x) => Math.round(x);
 
-    const lines = [];
-    let lastRound = -1;
+    // Group log by round
+    const byRound = new Map();
     for (const entry of log) {
-      if (entry.round !== lastRound) {
-        lines.push({ text: `── Round ${entry.round} ──`, color: PHASE_COLORS.round });
-        lastRound = entry.round;
+      if (!byRound.has(entry.round)) byRound.set(entry.round, []);
+      byRound.get(entry.round).push(entry);
+    }
+
+    // Build flat line list, inserting verbose toggle after each round's normal lines
+    const lines = []; // { text, color, isToggle?, round? }
+    for (const [round, entries] of byRound) {
+      lines.push({ text: `── Round ${round} ──`, color: PHASE_COLORS.round });
+      const normalEntries  = entries.filter(e => e.phase !== 'verbose');
+      const verboseEntries = entries.filter(e => e.phase === 'verbose');
+      for (const e of normalEntries) lines.push({ text: e.text, color: e.color });
+
+      if (verboseEntries.length > 0) {
+        const isOpen = verboseLog?.has(round);
+        lines.push({
+          text: isOpen ? '▼ Hide hit detail' : '▶ Show hit detail',
+          color: isOpen ? '#44ddaa' : '#2a4a6a',
+          isToggle: true, round,
+        });
+        if (isOpen) {
+          for (const e of verboseEntries) lines.push({ text: e.text, color: e.color });
+        }
       }
-      lines.push({ text: entry.text, color: entry.color });
     }
 
     if (lines.length === 0) {
@@ -408,7 +443,8 @@ export default class CombatScene extends Phaser.Scene {
     // Measure all line heights
     const measured = lines.map(line => {
       const t = this.add.text(-9999, -9999, line.text, {
-        font: '9px monospace', color: line.color,
+        font: line.isToggle ? 'bold 9px monospace' : '9px monospace',
+        color: line.color,
         wordWrap: { width: lw - 14 },
       }).setResolution(2);
       const h = t.height;
@@ -416,49 +452,45 @@ export default class CombatScene extends Phaser.Scene {
       return { ...line, h };
     });
 
-    // Total content height
-    const totalContentH = measured.reduce((s, m) => s + m.h + LINE_GAP, 0);
-    const maxScroll     = Math.max(0, totalContentH - lh);
-    const clampedOffset = Math.min(scrollOffset ?? 0, maxScroll);
+    const totalContentH  = measured.reduce((s, m) => s + m.h + LINE_GAP, 0);
+    const maxScroll      = Math.max(0, totalContentH - lh);
+    const clampedOffset  = Math.min(scrollOffset ?? 0, maxScroll);
+    const startVirtualY  = maxScroll > 0 ? maxScroll - clampedOffset : 0;
 
-    // Render lines starting from content offset
-    // We render all lines but only show those within the clipped window
-    let contentY = ly - (totalContentH - lh - clampedOffset);
-    // Alternatively: start at ly, skip lines above the clip
-    // Compute which lines are visible
-    let curY = ly + (maxScroll > 0 ? maxScroll - clampedOffset : 0);
-    // Simpler: build a full render at virtual Y, only create objects in window
     let virtualY = 0;
-    const startVirtualY = maxScroll > 0 ? maxScroll - clampedOffset : 0;
-
     for (const line of measured) {
       const lineTop = ly - startVirtualY + virtualY;
       const lineBot = lineTop + line.h;
-      // Only render if within clip window
+
       if (lineBot > ly && lineTop < ly + lh) {
-        add(this.add.text(R(lx), R(lineTop), line.text, {
-          font: '9px monospace',
+        const txt = add(this.add.text(R(lx), R(lineTop), line.text, {
+          font: line.isToggle ? 'bold 9px monospace' : '9px monospace',
           color: line.color,
           wordWrap: { width: lw - 14 },
         }).setOrigin(0, 0).setDepth(depth).setResolution(2));
+
+        if (line.isToggle && onToggleVerbose) {
+          txt.setInteractive({ useHandCursor: true });
+          txt.on('pointerover', () => txt.setColor('#88ccff'));
+          txt.on('pointerout',  () => txt.setColor(verboseLog?.has(line.round) ? '#44ddaa' : '#2a4a6a'));
+          txt.on('pointerdown', () => onToggleVerbose(line.round));
+        }
       }
       virtualY += line.h + LINE_GAP;
     }
 
-    // Scrollbar track
+    // Scrollbar
     if (maxScroll > 0) {
-      const trackX  = lx + lw - 6;
-      const trackG  = add(this.add.graphics().setDepth(depth));
+      const trackX = lx + lw - 6;
+      const trackG = add(this.add.graphics().setDepth(depth));
       trackG.fillStyle(0x0d1828, 1);
       trackG.fillRect(R(trackX), R(ly), 4, R(lh));
-
-      const thumbH   = Math.max(20, Math.round(lh * (lh / totalContentH)));
+      const thumbH     = Math.max(20, Math.round(lh * (lh / totalContentH)));
       const thumbRange = lh - thumbH;
-      const thumbY   = ly + Math.round(thumbRange * (1 - clampedOffset / maxScroll));
+      const thumbY     = ly + Math.round(thumbRange * (1 - clampedOffset / maxScroll));
       trackG.fillStyle(0x2255aa, 0.8);
       trackG.fillRoundedRect(R(trackX), R(thumbY), 4, thumbH, 2);
 
-      // Scroll wheel zone
       if (onScroll) {
         const zone = add(this.add.rectangle(R(lx + lw / 2), R(ly + lh / 2), lw, lh, 0xffffff, 0)
           .setDepth(depth + 1).setInteractive());

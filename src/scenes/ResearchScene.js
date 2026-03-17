@@ -716,6 +716,7 @@ export default class ResearchScene extends Phaser.Scene {
     // Arrays of scene objects created per-open; destroyed on close
     this._panelObjs   = [];   // static chrome (dim, bg, title, close, tabs)
     this._treeObjs    = [];   // redrawn per tree switch
+    this._cheatScrollY = 0;  // scroll offset for test cheat panel
   }
 
   create() {
@@ -785,6 +786,10 @@ export default class ResearchScene extends Phaser.Scene {
 
   _close() {
     this._visible = false;
+    if (this._cheatWheelHandler) {
+      this.input.off('wheel', this._cheatWheelHandler);
+      this._cheatWheelHandler = null;
+    }
     this._destroyObjs(this._panelObjs);
     this._destroyObjs(this._treeObjs);
     this._panelObjs = [];
@@ -865,6 +870,11 @@ export default class ResearchScene extends Phaser.Scene {
 
     // Tabs
     this._buildTabs(P);
+
+    // Test environment: draw full perk list on right side
+    if (this.scene.get('GameScene')?.testMode) {
+      this._drawCheatPanel(P);
+    }
   }
 
   // ── Tabs ──────────────────────────────────────────────────────────────────
@@ -1122,6 +1132,167 @@ export default class ResearchScene extends Phaser.Scene {
     // Refresh tab badges without rebuilding whole panel
     this._buildTabs();
   }
+
+  // ── Test environment cheat panel ──────────────────────────────────────────
+  _drawCheatPanel(targetArr) {
+    const arr = targetArr || this._panelObjs;
+    const { _PX: PX, _PY: PY, _PW: PW, _PH: PH } = this;
+
+    const PANEL_W = 260;
+    const PANEL_X = R(PX + PW - PANEL_W - 4);
+    const PANEL_Y = PY + 4;
+    const PANEL_H = PH - 8;
+    const INNER_Y = PANEL_Y + 36;
+    const INNER_H = PANEL_H - 44;
+    const ROW_H   = 26;
+    const dep     = 94;
+
+    const doScroll = (dy) => {
+      const allLen = TREE_DEFS.reduce((n, t) => n + t.pool.length, 0);
+      const ms = Math.max(0, allLen * ROW_H - INNER_H);
+      this._cheatScrollY = Math.max(0, Math.min(ms, (this._cheatScrollY ?? 0) + dy * 0.5));
+      if (this._cheatWheelHandler) { this.input.off('wheel', this._cheatWheelHandler); this._cheatWheelHandler = null; }
+      this._destroyObjs(this._panelObjs);
+      this._panelObjs = [];
+      this._buildPanel();
+      this._drawTree(this._activeTree);
+    };
+
+    // Single scene-level wheel listener — fires whenever pointer is over the panel
+    const wheelHandler = (ptr, _objs, _dx, dy) => {
+      if (ptr.x >= PANEL_X && ptr.x <= PANEL_X + PANEL_W &&
+          ptr.y >= PANEL_Y && ptr.y <= PANEL_Y + PANEL_H) {
+        doScroll(dy);
+      }
+    };
+    this.input.on('wheel', wheelHandler);
+    // Store so it can be removed when panel is destroyed
+    this._cheatWheelHandler = wheelHandler;
+
+    // Panel background
+    const bg = this.add.graphics().setDepth(dep);
+    bg.fillStyle(0x040810, 0.97);
+    bg.fillRoundedRect(PANEL_X, PANEL_Y, PANEL_W, PANEL_H, 6);
+    bg.lineStyle(1, 0xff4422, 0.5);
+    bg.strokeRoundedRect(PANEL_X, PANEL_Y, PANEL_W, PANEL_H, 6);
+    arr.push(bg);
+
+    // Blocker at dep — stops clicks reaching dim layer; behind row zones (dep+2)
+    const blocker = this.add.rectangle(PANEL_X, PANEL_Y, PANEL_W, PANEL_H, 0xffffff, 0)
+      .setOrigin(0, 0).setDepth(dep).setInteractive();
+    blocker.on('pointerdown', (_p, _lx, _ly, e) => e.stopPropagation());
+    arr.push(blocker);
+
+    // Header + divider
+    const hdr = this._makeTxt(R(PANEL_X + PANEL_W / 2), PANEL_Y + 14,
+      '⚗  TEST — ALL PERKS', 'bold 9px monospace', '#ff6644', dep + 3).setOrigin(0.5, 0.5);
+    arr.push(hdr);
+    const dg = this.add.graphics().setDepth(dep + 1);
+    dg.lineStyle(1, 0x441a0a, 1);
+    dg.lineBetween(PANEL_X + 8, PANEL_Y + 26, PANEL_X + PANEL_W - 8, PANEL_Y + 26);
+    arr.push(dg);
+
+    // Flat perk list
+    const allPerks = [];
+    for (const tree of TREE_DEFS) {
+      for (const perk of tree.pool) allPerks.push({ perk, tree });
+    }
+    const totalH    = allPerks.length * ROW_H;
+    const maxScroll = Math.max(0, totalH - INNER_H);
+    this._cheatScrollY = Math.min(this._cheatScrollY ?? 0, maxScroll);
+
+    // Clip mask
+    const maskGfx = this.make.graphics({ add: false });
+    maskGfx.fillRect(PANEL_X, INNER_Y, PANEL_W - 12, INNER_H);
+    const mask = maskGfx.createGeometryMask();
+    arr.push(maskGfx);
+
+    allPerks.forEach(({ perk, tree }, i) => {
+      const ry       = INNER_Y + i * ROW_H - this._cheatScrollY;
+      const unlocked = this.unlocked.has(perk.id);
+      const rowCol   = unlocked ? 0x0a1e10 : 0x08101c;
+      const textCol  = unlocked ? '#44bb66' : '#5577aa';
+
+      // Row background graphics — dep+1, masked
+      const rowG = this.add.graphics().setDepth(dep + 1).setMask(mask);
+      rowG.fillStyle(rowCol, 1);
+      rowG.fillRect(PANEL_X + 4, ry + 1, PANEL_W - 16, ROW_H - 2);
+      rowG.lineStyle(1, unlocked ? 0x228844 : 0x1a2a3a, 0.7);
+      rowG.strokeRect(PANEL_X + 4, ry + 1, PANEL_W - 16, ROW_H - 2);
+      rowG.fillStyle(tree.color, unlocked ? 0.8 : 0.3);
+      rowG.fillRect(PANEL_X + 4, ry + 1, 3, ROW_H - 2);
+      arr.push(rowG);
+
+      // Text — dep+3, masked (non-interactive so clicks fall through to zone)
+      const nameTxt = this._makeTxt(PANEL_X + 14, ry + 4, perk.name,
+        unlocked ? 'bold 9px monospace' : '9px monospace', textCol, dep + 3).setMask(mask);
+      arr.push(nameTxt);
+      const treeLbl = this._makeTxt(PANEL_X + PANEL_W - 22, ry + 4,
+        tree.label.slice(0, 4), '8px monospace',
+        unlocked ? '#226633' : '#2a3a4a', dep + 3).setOrigin(1, 0).setMask(mask);
+      arr.push(treeLbl);
+      const descTxt = this._makeTxt(PANEL_X + 14, ry + 14,
+        perk.desc.length > 36 ? perk.desc.slice(0, 34) + '…' : perk.desc,
+        '7px monospace', unlocked ? '#336644' : '#2a3a4a', dep + 3).setMask(mask);
+      arr.push(descTxt);
+
+      // Hit zone — dep+2 (above bg, below text so text clicks fall through)
+      const zone = this.add.rectangle(
+        PANEL_X + 4, ry + 1, PANEL_W - 16, ROW_H - 2, 0xffffff, 0
+      ).setOrigin(0, 0).setDepth(dep + 2).setMask(mask).setInteractive({ useHandCursor: !unlocked });
+      zone.on('pointerdown', (_p, _lx, _ly, e) => {
+        e.stopPropagation();
+        if (!unlocked) this._cheatUnlock(perk, tree);
+      });
+      zone.on('pointerover', () => {
+        if (!unlocked) {
+          rowG.fillStyle(0x122840, 1);
+          rowG.fillRect(PANEL_X + 4, ry + 1, PANEL_W - 16, ROW_H - 2);
+          rowG.fillStyle(tree.color, 0.6);
+          rowG.fillRect(PANEL_X + 4, ry + 1, 3, ROW_H - 2);
+        }
+      });
+      zone.on('pointerout', () => {
+        rowG.fillStyle(rowCol, 1);
+        rowG.fillRect(PANEL_X + 4, ry + 1, PANEL_W - 16, ROW_H - 2);
+        rowG.fillStyle(tree.color, unlocked ? 0.8 : 0.3);
+        rowG.fillRect(PANEL_X + 4, ry + 1, 3, ROW_H - 2);
+      });
+      arr.push(zone);
+    });
+
+    // Scrollbar — visual only
+    const trackX = PANEL_X + PANEL_W - 10;
+    const trackG = this.add.graphics().setDepth(dep + 1);
+    trackG.fillStyle(0x0d1828, 1);
+    trackG.fillRect(trackX, INNER_Y, 5, INNER_H);
+    if (maxScroll > 0) {
+      const thumbH = Math.max(20, Math.round(INNER_H * (INNER_H / totalH)));
+      const thumbY = INNER_Y + Math.round((INNER_H - thumbH) * (this._cheatScrollY / maxScroll));
+      trackG.fillStyle(0xff4422, 0.6);
+      trackG.fillRoundedRect(trackX, thumbY, 5, thumbH, 2);
+    }
+    arr.push(trackG);
+
+    // Thin zone over scrollbar track — dep+2, handles wheel scroll
+    const trackZone = this.add.rectangle(trackX - 4, INNER_Y, 16, INNER_H, 0xffffff, 0)
+      .setOrigin(0, 0).setDepth(dep + 2).setInteractive();
+    trackZone.on('pointerdown', (_p, _lx, _ly, e) => e.stopPropagation());
+    arr.push(trackZone);
+  }
+
+  _cheatUnlock(perk, tree) {
+    if (this.unlocked.has(perk.id)) return;
+    this.unlocked.add(perk.id);
+    this.game.events.emit('researchUnlocked', { nodeId: perk.id, treeId: tree.id });
+    if (this._cheatWheelHandler) { this.input.off('wheel', this._cheatWheelHandler); this._cheatWheelHandler = null; }
+    this._destroyObjs(this._panelObjs);
+    this._panelObjs = [];
+    this._buildPanel();
+    this._drawTree(this._activeTree);
+    this._updateRPDisplay();
+  }
+
 
   // ── WIP tooltip ───────────────────────────────────────────────────────────
   _showWip(px, py) {
