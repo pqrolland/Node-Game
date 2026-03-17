@@ -46,7 +46,7 @@ export const PERK_CATALOGUE = {
   // Cruiser tree
   c_01:  { name: 'Field Medics',       ships: ['cruiser'],     desc: 'Repair chance on death increases from 50% to 65%.' },
   c_02:  { name: 'Reinforced Hull',    ships: ['cruiser'],     desc: '+10 HP per Cruiser.' },
-  c_03:  { name: 'Nanite Repair',      ships: ['cruiser'],     desc: 'Repaired Cruisers return at full health.' },
+  c_03:  { name: 'Nanite Repair',      ships: ['cruiser'],     desc: 'Damaged (not destroyed) Cruisers have a 30% chance to restore to full HP each phase.' },
   c_04:  { name: 'Escort Formation',   ships: ['cruiser'],     desc: 'Absorbs one hit directed at the Flagship per Main Strike round.' },
   c_05:  { name: 'Regeneration Field', ships: ['cruiser'],     desc: 'Each friendly ship in this stack gains +5 HP.' },
   c_06:  { name: 'Hunter Protocol',    ships: ['cruiser'],     desc: '+5 damage against Dreadnaughts and Flagships.' },
@@ -213,6 +213,18 @@ export default class PerkManager {
     return destroyerCount * 3;
   }
 
+  // Phase 1: Whether Torpedo Spread is active — expands barrage to hit all ship types
+  hasTorpedoSpread(unit) {
+    return this._has(unit.team, 'd_05');
+  }
+
+  // Phase 1: Orbital Strike — returns total damage to spread across ALL enemy ships
+  // Each living dreadnaught contributes 5 damage applied to every enemy ship.
+  getOrbitalStrikeDamage(unit) {
+    if (!this._has(unit.team, 'dr_03')) return 0;
+    return (unit.unitHP?.dreadnaught?.filter(h => h > 0).length ?? 0) * 5;
+  }
+
   // Phase 1: First Strike hits — returns [{ damage }] one entry per qualifying ship
   getFirstStrikeHits(unit) {
     const team = unit.team;
@@ -233,7 +245,7 @@ export default class PerkManager {
   }
 
   // Phase 3: Modify attack queue entries (damage bonuses per ship type)
-  // enemy is passed so Last Stand and Hunter Protocol can inspect enemy composition
+  // enemy is passed so Last Stand, Hunter Protocol, and Ace Pilots can inspect enemy composition
   buildAttackQueue(unit, enemy, baseQueue) {
     if (baseQueue.length === 0) return baseQueue;
     const team = unit.team;
@@ -246,6 +258,9 @@ export default class PerkManager {
     // Hunter Protocol: bonus if enemy has any dreadnaughts or flagships alive
     const enemyHasHeavy = ((enemy?.unitHP?.dreadnaught?.filter(h => h > 0).length ?? 0) +
                            (enemy?.unitHP?.flagship?.filter(h => h > 0).length ?? 0)) > 0;
+
+    // Ace Pilots target checks — only double when enemy has the relevant type
+    const enemyHasDestroyer = (enemy?.unitHP?.destroyer?.filter(h => h > 0).length ?? 0) > 0;
 
     // Pure-fighter check for Swarm Tactics
     const pureFighters = unit.composition && SHIP_ORDER
@@ -261,7 +276,6 @@ export default class PerkManager {
       if (type === 'fighter'   && this._has(team, 'f_02')) dmg += 1;
       if (type === 'destroyer' && this._has(team, 'd_08')) dmg += 1;
 
-      // ── New perks ─────────────────────────────────────────────────────
       // Siege Cannons — Dreadnaught +5 damage
       if (type === 'dreadnaught' && this._has(team, 'dr_01')) dmg += 5;
 
@@ -274,14 +288,21 @@ export default class PerkManager {
 
       // Last Stand — bonus when outnumbered
       if (outnumbered) {
-        if (type === 'destroyer' && this._has(team, 'd_06')) dmg += 2;
-        if (type === 'cruiser'   && this._has(team, 'c_10')) dmg += 2;
+        if (type === 'destroyer'   && this._has(team, 'd_06'))  dmg += 2;
+        if (type === 'cruiser'     && this._has(team, 'c_10'))  dmg += 2;
         if (type === 'dreadnaught' && this._has(team, 'dr_07')) dmg += 5;
-        if (type === 'flagship'  && this._has(team, 'fl_05')) dmg += 10;
+        if (type === 'flagship'    && this._has(team, 'fl_05')) dmg += 10;
       }
 
       // Swarm Tactics — Fighter +1 when stack is pure fighters
       if (type === 'fighter' && pureFighters && this._has(team, 'f_06')) dmg += 1;
+
+      // Ace Pilots — double damage when enemy has the relevant type alive
+      if (enemyHasDestroyer) {
+        if (type === 'fighter'   && this._has(team, 'f_05')) dmg *= 2;
+        if (type === 'destroyer' && this._has(team, 'd_07')) dmg *= 2;
+        if (type === 'cruiser'   && this._has(team, 'c_07')) dmg *= 2;
+      }
 
       return { ...entry, damage: dmg };
     }).flatMap(entry => {
@@ -307,11 +328,47 @@ export default class PerkManager {
     const DODGE_CHANCE = 0.10;
     let dodged = 0;
     const hits = incomingBuf.filter(hit => {
-      if (!dodgeTypes.has(hit.type)) return true; // non-dodge ship — always hits
+      if (!dodgeTypes.has(hit.type)) return true;
       if (Math.random() < DODGE_CHANCE) { dodged++; return false; }
       return true;
     });
     return { hits, dodged, chance: DODGE_CHANCE };
+  }
+
+  // Phase 4: Kamikaze Protocol — dead fighters retaliate
+  // fighterDeaths: number of fighters that died this resolution phase
+  // Returns { hits: [{ damage }], triggered: count }
+  getKamikazeHits(unit, fighterDeaths) {
+    if (!this._has(unit.team, 'f_10') || fighterDeaths === 0) return { hits: [], triggered: 0 };
+    const KAMIKAZE_CHANCE = 0.50;
+    const KAMIKAZE_DMG    = SHIP_STATS['fighter'].damage;
+    const hits = [];
+    for (let i = 0; i < fighterDeaths; i++) {
+      if (Math.random() < KAMIKAZE_CHANCE) hits.push({ damage: KAMIKAZE_DMG });
+    }
+    return { hits, triggered: hits.length, chance: KAMIKAZE_CHANCE, total: fighterDeaths };
+  }
+
+  // Phase 4: Nanite Repair — damaged (but alive) cruisers have 30% chance to heal to full
+  // Returns { healed: count, eligible: count }
+  applyNaniteRepair(unit) {
+    if (!this._has(unit.team, 'c_03')) return { healed: 0, eligible: 0 };
+    const NANITE_CHANCE = 0.30;
+    const maxHP = unit.maxHP?.cruiser ?? SHIP_STATS.cruiser.hp;
+    const hps   = unit.unitHP?.cruiser;
+    if (!hps) return { healed: 0, eligible: 0 };
+
+    let eligible = 0, healed = 0;
+    for (let i = 0; i < hps.length; i++) {
+      if (hps[i] > 0 && hps[i] < maxHP) {
+        eligible++;
+        if (Math.random() < NANITE_CHANCE) {
+          hps[i] = maxHP;
+          healed++;
+        }
+      }
+    }
+    return { healed, eligible, chance: NANITE_CHANCE };
   }
 
   // Phase 4: Field Medics — cruiser repair chance

@@ -195,40 +195,56 @@ export default class CombatManager {
     // Count destroyers BEFORE any damage so both sides stage simultaneously.
     const atkBaseShots = (attacker.unitHP.destroyer?.filter(h => h > 0).length ?? 0) * BARRAGE_SHOTS_PER_DESTROYER;
     const defBaseShots = (defender.unitHP.destroyer?.filter(h => h > 0).length ?? 0) * BARRAGE_SHOTS_PER_DESTROYER;
-    // Perk hook: Improved Barrage may increase attacker's shot count
     const atkBarrageShots = this._perks?.getBarrageShots(attacker, atkBaseShots) ?? atkBaseShots;
     const defBarrageShots = this._perks?.getBarrageShots(defender, defBaseShots) ?? defBaseShots;
 
-    // Stage barrage damage for both sides independently
-    const atkBarrageBuf = _stageBarrage(atkBarrageShots, defender.unitHP);
-    const defBarrageBuf = _stageBarrage(defBarrageShots, attacker.unitHP);
+    // Perk hook: Torpedo Spread — expand barrage to all ship types
+    const atkTorpedo = this._perks?.hasTorpedoSpread(attacker) ?? false;
+    const defTorpedo = this._perks?.hasTorpedoSpread(defender) ?? false;
 
-    // Perk hook: First Strike — each qualifying ship fires a pre-strike hit
+    const atkBarrageBuf = _stageBarrage(atkBarrageShots, defender.unitHP, atkTorpedo);
+    const defBarrageBuf = _stageBarrage(defBarrageShots, attacker.unitHP, defTorpedo);
+
+    // Perk hook: First Strike
     const atkFirstStrike = this._perks?.getFirstStrikeHits(attacker) ?? [];
     const defFirstStrike = this._perks?.getFirstStrikeHits(defender) ?? [];
     const atkFSBuf = _stageFirstStrike(atkFirstStrike, defender.unitHP);
     const defFSBuf = _stageFirstStrike(defFirstStrike, attacker.unitHP);
+
+    // Perk hook: Orbital Strike — flat damage to every enemy ship
+    const atkOrbitalDmg = this._perks?.getOrbitalStrikeDamage(attacker) ?? 0;
+    const defOrbitalDmg = this._perks?.getOrbitalStrikeDamage(defender) ?? 0;
+    const atkOrbitalBuf = atkOrbitalDmg > 0 ? _stageOrbitalStrike(atkOrbitalDmg, defender.unitHP) : [];
+    const defOrbitalBuf = defOrbitalDmg > 0 ? _stageOrbitalStrike(defOrbitalDmg, attacker.unitHP) : [];
 
     // Apply all pre-strike buffers, prune dead, log results
     _applyBuffer(atkBarrageBuf, defender.unitHP);
     _applyBuffer(defBarrageBuf, attacker.unitHP);
     _applyBuffer(atkFSBuf, defender.unitHP);
     _applyBuffer(defFSBuf, attacker.unitHP);
+    _applyBuffer(atkOrbitalBuf, defender.unitHP);
+    _applyBuffer(defOrbitalBuf, attacker.unitHP);
     _pruneHP(attacker.unitHP, attacker.composition); attacker.stackSize = _stackSize(attacker.composition);
     _pruneHP(defender.unitHP, defender.composition); defender.stackSize = _stackSize(defender.composition);
 
     if (atkBarrageBuf.length > 0) {
+      const label = atkTorpedo ? 'Torpedo Spread' : 'Pre-Strike';
+      const destroyerCount = atkBarrageShots / BARRAGE_SHOTS_PER_DESTROYER | 0;
+      const targetsHit = new Set(atkBarrageBuf.map(h => h.type));
       battle.log.push({ round: rnd, phase: 'prestrike',
-        text: `Atk [Pre-Strike]: ${atkBarrageBuf.length / BARRAGE_SHOTS_PER_DESTROYER | 0} destroyer(s) → ${atkBarrageBuf.length} fighter(s) destroyed`,
+        text: `Atk [${label}]: ${destroyerCount} destroyer(s) → ${atkBarrageBuf.length} hit(s) on [${[...targetsHit].join(', ')}]`,
         color: '#aa66ff' });
     }
     if (defBarrageBuf.length > 0) {
+      const label = defTorpedo ? 'Torpedo Spread' : 'Pre-Strike';
+      const destroyerCount = defBarrageShots / BARRAGE_SHOTS_PER_DESTROYER | 0;
+      const targetsHit = new Set(defBarrageBuf.map(h => h.type));
       battle.log.push({ round: rnd, phase: 'prestrike',
-        text: `Def [Pre-Strike]: ${defBarrageBuf.length / BARRAGE_SHOTS_PER_DESTROYER | 0} destroyer(s) → ${defBarrageBuf.length} fighter(s) destroyed`,
+        text: `Def [${label}]: ${destroyerCount} destroyer(s) → ${defBarrageBuf.length} hit(s) on [${[...targetsHit].join(', ')}]`,
         color: '#aa66ff' });
     }
     if (atkBarrageBuf.length > 0 || defBarrageBuf.length > 0) {
-      ui?.logEvent(`  ↳ Anti-Fighter Barrage: atk ${atkBarrageBuf.length} / def ${defBarrageBuf.length} fighters destroyed`);
+      ui?.logEvent(`  ↳ Anti-Fighter Barrage: atk ${atkBarrageBuf.length} / def ${defBarrageBuf.length} hit(s)`);
     }
     if (atkFSBuf.length > 0) {
       const totalDmg = atkFSBuf.reduce((s, h) => s + h.damage, 0);
@@ -242,10 +258,22 @@ export default class CombatManager {
         text: `Def [First Strike]: ${defFirstStrike.length} ship(s) → ${totalDmg} dmg dealt`,
         color: '#aa66ff' });
     }
+    if (atkOrbitalBuf.length > 0) {
+      const drCount = attacker.unitHP?.dreadnaught?.filter(h => h > 0).length ?? 0;
+      battle.log.push({ round: rnd, phase: 'prestrike',
+        text: `Atk [Orbital Strike]: ${drCount} dreadnaught(s) → ${atkOrbitalBuf.length} ship(s) hit (${atkOrbitalDmg} dmg each)`,
+        color: '#aa66ff' });
+    }
+    if (defOrbitalBuf.length > 0) {
+      const drCount = defender.unitHP?.dreadnaught?.filter(h => h > 0).length ?? 0;
+      battle.log.push({ round: rnd, phase: 'prestrike',
+        text: `Def [Orbital Strike]: ${drCount} dreadnaught(s) → ${defOrbitalBuf.length} ship(s) hit (${defOrbitalDmg} dmg each)`,
+        color: '#aa66ff' });
+    }
 
     // Early exit if pre-strike ended the battle
     if (!_anyAlive(attacker) || !_anyAlive(defender)) {
-      this._emitRoundUpdate(battle, ui, 0, 0, 0, 0, null, null, null, null);
+      this._emitRoundUpdate(battle, ui, 0, 0, 0, 0, null, null, null, null, null, null, null, null, null, null);
       return;
     }
 
@@ -270,14 +298,35 @@ export default class CombatManager {
     const atkDodge = this._perks?.applyDodge(attacker, defStrike) ?? { hits: defStrike, dodged: 0, chance: 0 };
     const defDodge = this._perks?.applyDodge(defender, atkStrike) ?? { hits: atkStrike, dodged: 0, chance: 0 };
 
+    // Snapshot fighter counts before applying damage for Kamikaze Protocol
+    const atkFightersBefore = attacker.unitHP?.fighter?.filter(h => h > 0).length ?? 0;
+    const defFightersBefore = defender.unitHP?.fighter?.filter(h => h > 0).length ?? 0;
+
     _applyBuffer(defDodge.hits, defender.unitHP);
     _applyBuffer(atkDodge.hits, attacker.unitHP);
+
+    // Perk hook: Kamikaze Protocol — count fighter deaths this phase, stage retaliatory hits
+    const atkFightersAfter  = attacker.unitHP?.fighter?.filter(h => h > 0).length ?? 0;
+    const defFightersAfter  = defender.unitHP?.fighter?.filter(h => h > 0).length ?? 0;
+    const atkFighterDeaths  = atkFightersBefore - atkFightersAfter;
+    const defFighterDeaths  = defFightersBefore - defFightersAfter;
+    const atkKamikaze = this._perks?.getKamikazeHits(attacker, atkFighterDeaths) ?? { hits: [], triggered: 0 };
+    const defKamikaze = this._perks?.getKamikazeHits(defender, defFighterDeaths) ?? { hits: [], triggered: 0 };
+    const atkKamikazeBuf = _stageFirstStrike(atkKamikaze.hits, defender.unitHP);
+    const defKamikazeBuf = _stageFirstStrike(defKamikaze.hits, attacker.unitHP);
+    _applyBuffer(atkKamikazeBuf, defender.unitHP);
+    _applyBuffer(defKamikazeBuf, attacker.unitHP);
 
     // Prune dead ships; run cruiser repair for this phase only
     const atkRepairChance = this._perks?.getRepairChance(attacker, 0.5) ?? 0.5;
     const defRepairChance = this._perks?.getRepairChance(defender, 0.5) ?? 0.5;
     const atkRepair = _pruneHPWithRepair(attacker.unitHP, attacker.composition, atkRepairChance, attacker.maxHP);
     const defRepair = _pruneHPWithRepair(defender.unitHP, defender.composition, defRepairChance, defender.maxHP);
+
+    // Perk hook: Nanite Repair — damaged-but-alive cruisers roll 30% heal to full
+    const atkNanite = this._perks?.applyNaniteRepair(attacker) ?? { healed: 0, eligible: 0 };
+    const defNanite = this._perks?.applyNaniteRepair(defender) ?? { healed: 0, eligible: 0 };
+
     attacker.stackSize = _stackSize(attacker.composition);
     defender.stackSize = _stackSize(defender.composition);
 
@@ -295,11 +344,13 @@ export default class CombatManager {
       atkLost, defLost,
       atkRepair, defRepair,
       atkDodge, defDodge,
-      atkRepairChance, defRepairChance);
+      atkRepairChance, defRepairChance,
+      atkKamikaze, defKamikaze,
+      atkNanite, defNanite);
   }
 
   // ── Emit round update: write log entries then notify CombatScene ──────────
-  _emitRoundUpdate(battle, ui, atkQLen, defQLen, atkLost, defLost, atkRepair, defRepair, atkDodge, defDodge, atkRepairChance, defRepairChance) {
+  _emitRoundUpdate(battle, ui, atkQLen, defQLen, atkLost, defLost, atkRepair, defRepair, atkDodge, defDodge, atkRepairChance, defRepairChance, atkKamikaze, defKamikaze, atkNanite, defNanite) {
     const { attacker, defender } = battle;
     const rnd = battle.roundNumber;
     const aS  = attacker.stackSize;
@@ -317,7 +368,7 @@ export default class CombatManager {
       text: `Def [Main Strike]: ${defQLen} attack(s) → ${atkLost} destroyed (${aS} remain)`,
       color: '#44ddaa' });
 
-    // Wingman dodge log lines — only shown when at least one dodge occurred
+    // Wingman dodge
     for (const [d, side] of [[atkDodge, 'Atk'], [defDodge, 'Def']]) {
       if (!d || d.dodged === 0) continue;
       const total = d.dodged + (d.hits?.length ?? 0);
@@ -326,7 +377,16 @@ export default class CombatManager {
         color: '#66aaff' });
     }
 
-    // Cruiser repair log lines — shows gross dead/repaired and chance for verification
+    // Kamikaze Protocol — only log when at least one fighter actually retaliated
+    for (const [k, side] of [[atkKamikaze, 'Atk'], [defKamikaze, 'Def']]) {
+      if (!k || !k.triggered) continue;
+      const pct = Math.round((k.chance ?? 0.5) * 100);
+      battle.log.push({ round: rnd, phase: 'resolution',
+        text: `💥 ${side} [Kamikaze]: ${k.triggered}/${k.total ?? 0} fighter(s) retaliated (${pct}% chance)`,
+        color: '#ff8844' });
+    }
+
+    // Cruiser repair (dead → respawn)
     for (const [r, side, chance] of [[atkRepair, 'Atk', atkRepairChance], [defRepair, 'Def', defRepairChance]]) {
       if (!r || r.dead === 0) continue;
       const pct = chance != null ? ` (${Math.round(chance * 100)}% chance)` : '';
@@ -338,10 +398,22 @@ export default class CombatManager {
         color: '#664444' });
     }
 
-    // Notify CombatScene — log is complete before this fires
+    // Nanite Repair (damaged → full heal)
+    for (const [n, side] of [[atkNanite, 'Atk'], [defNanite, 'Def']]) {
+      if (!n || n.eligible === 0) continue;
+      const pct = Math.round((n.chance ?? 0.30) * 100);
+      if (n.healed > 0) battle.log.push({ round: rnd, phase: 'resolution',
+        text: `🧬 ${side} [Nanite Repair]: ${n.healed}/${n.eligible} damaged cruiser(s) restored (${pct}% chance)`,
+        color: '#44ddaa' });
+      if (n.healed < n.eligible) battle.log.push({ round: rnd, phase: 'resolution',
+        text: `✗ ${side} [Nanite Repair]: ${n.eligible - n.healed}/${n.eligible} nanite repair failed (${pct}% chance)`,
+        color: '#664444' });
+    }
+
+    // Notify CombatScene
     this._scene.game.events.emit('combatUpdate', { battle });
 
-    // UIScene event log summary
+    // UIScene summary
     const atkLostTotal = (battle._atkBefore ?? aS) - aS;
     ui?.logEvent(`⚔ Rnd ${rnd}: ${atkQLen}atk/${defQLen}def — Atk -${atkLostTotal} (${aS}), Def -${defLost} (${dS})`);
   }
@@ -528,26 +600,59 @@ function _stageFirstStrike(hits, targetHP) {
   return buf;
 }
 
+// Build a damage buffer for Orbital Strike — deals fixed damage to EVERY living enemy ship.
+// Returns [{ type, idx, damage }]
+function _stageOrbitalStrike(damagePerShip, targetHP) {
+  const buf = [];
+  for (const type of SHIP_ORDER) {
+    const hps = targetHP[type] || [];
+    for (let i = 0; i < hps.length; i++) {
+      if (hps[i] > 0) buf.push({ type, idx: i, damage: damagePerShip });
+    }
+  }
+  return buf;
+}
+
 // Build a damage buffer for Anti-Fighter Barrage.
-// Each destroyer fires BARRAGE_SHOTS_PER_DESTROYER shots at distinct fighters.
+// If torpedoSpread is true (Torpedo Spread perk), expands target pool to all ship types
+// at 15 damage per shot instead of targeting only fighters at BARRAGE_DAMAGE.
 // Staged damage is tracked to avoid wasting shots on already-doomed targets.
-// Returns [{ type: 'fighter', idx, damage }]
-function _stageBarrage(totalShots, targetHP) {
+// Returns [{ type, idx, damage }]
+function _stageBarrage(totalShots, targetHP, torpedoSpread = false) {
   const buf       = [];
-  const stagedDmg = {}; // idx → total staged damage on that fighter
+  const stagedDmg = {};
 
   for (let i = 0; i < totalShots; i++) {
-    const hps    = targetHP.fighter || [];
+    const TORPEDO_DAMAGE = 15;
     const viable = [];
-    for (let j = 0; j < hps.length; j++) {
-      if (hps[j] <= 0) continue;
-      if (hps[j] - (stagedDmg[j] || 0) > 0) viable.push(j);
-    }
-    if (!viable.length) break;
 
-    const idx = viable[Math.floor(Math.random() * viable.length)];
-    stagedDmg[idx] = (stagedDmg[idx] || 0) + BARRAGE_DAMAGE;
-    buf.push({ type: 'fighter', idx, damage: BARRAGE_DAMAGE });
+    if (torpedoSpread) {
+      // All living ship types are valid targets
+      for (const type of SHIP_ORDER) {
+        const hps = targetHP[type] || [];
+        for (let j = 0; j < hps.length; j++) {
+          if (hps[j] <= 0) continue;
+          const key = `${type}:${j}`;
+          if (hps[j] - (stagedDmg[key] || 0) > 0) viable.push({ type, idx: j, key });
+        }
+      }
+      if (!viable.length) break;
+      const t = viable[Math.floor(Math.random() * viable.length)];
+      stagedDmg[t.key] = (stagedDmg[t.key] || 0) + TORPEDO_DAMAGE;
+      buf.push({ type: t.type, idx: t.idx, damage: TORPEDO_DAMAGE });
+    } else {
+      // Original behaviour — fighters only
+      const hps = targetHP.fighter || [];
+      for (let j = 0; j < hps.length; j++) {
+        if (hps[j] <= 0) continue;
+        const key = `fighter:${j}`;
+        if (hps[j] - (stagedDmg[key] || 0) > 0) viable.push({ type: 'fighter', idx: j, key });
+      }
+      if (!viable.length) break;
+      const t = viable[Math.floor(Math.random() * viable.length)];
+      stagedDmg[t.key] = (stagedDmg[t.key] || 0) + BARRAGE_DAMAGE;
+      buf.push({ type: 'fighter', idx: t.idx, damage: BARRAGE_DAMAGE });
+    }
   }
   return buf;
 }

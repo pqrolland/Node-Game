@@ -35,9 +35,9 @@ export default class UIScene extends Phaser.Scene {
     // ── Resource slots (top right) ─────────────────────────────────────────
     const resDefs = [
       { key: 'units', icon: '⬡', color: '#aaccff', label: 'Units'  },
-      { key: 'food',  icon: '🌾', color: '#88cc44', label: 'Food'   },
+      { key: 'food',  icon: null, color: '#88cc44', label: 'Food'   },
       { key: 'metal', icon: null, color: '#8888cc', label: 'Metal'  },
-      { key: 'fuel',  icon: '⛽', color: '#cc8844', label: 'Fuel'   },
+      { key: 'fuel',  icon: null, color: '#cc8844', label: 'Fuel'   },
     ];
 
     this.resourceTexts = {};
@@ -52,9 +52,12 @@ export default class UIScene extends Phaser.Scene {
         this.add.text(slotLeft, TOP_BAR_H / 2, icon, {
           font: '14px monospace', color,
         }).setOrigin(0, 0.5);
-      } else {
-        // Metal: drawn gear icon — two overlapping rectangles + hollow centre
+      } else if (key === 'metal') {
         this._drawMetalIcon(slotLeft + 7, TOP_BAR_H / 2, color);
+      } else if (key === 'fuel') {
+        this._drawFuelIcon(slotLeft + 7, TOP_BAR_H / 2, color);
+      } else if (key === 'food') {
+        this._drawFoodIcon(slotLeft + 7, TOP_BAR_H / 2, color);
       }
 
       this.add.text(slotLeft + 22, TOP_BAR_H / 2, label, {
@@ -262,6 +265,44 @@ export default class UIScene extends Phaser.Scene {
     // Hollow centre circle
     g.fillStyle(0x080c14, 1);
     g.fillCircle(cx, cy, 4);
+  }
+
+  _drawFuelIcon(cx, cy, hexColor) {
+    // Flame — matches fuel_extractor building icon, scaled for HUD
+    const col  = parseInt(hexColor.replace('#', ''), 16);
+    const col2 = 0xffcc44;
+    const g    = this.add.graphics();
+    // Outer flame
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx, cy - 8, cx - 6, cy + 5, cx + 6, cy + 5);
+    // Inner bright core
+    g.fillStyle(col2, 1);
+    g.fillTriangle(cx, cy - 2, cx - 3, cy + 5, cx + 3, cy + 5);
+  }
+
+  _drawFoodIcon(cx, cy, hexColor) {
+    // Space moss — layered green cloud puffs suggesting organic growth
+    const col  = parseInt(hexColor.replace('#', ''), 16);  // #88cc44
+    const col2 = 0xaee060;  // lighter highlight
+    const col3 = 0x558822;  // darker shadow base
+    const g    = this.add.graphics();
+    // Dark base blob
+    g.fillStyle(col3, 1);
+    g.fillCircle(cx - 3, cy + 3, 5);
+    g.fillCircle(cx + 3, cy + 3, 5);
+    g.fillCircle(cx,     cy + 4, 5);
+    // Main mid-green cloud body
+    g.fillStyle(col, 1);
+    g.fillCircle(cx - 4, cy + 1, 5);
+    g.fillCircle(cx + 4, cy + 1, 5);
+    g.fillCircle(cx,     cy - 1, 5);
+    g.fillCircle(cx - 2, cy + 3, 4);
+    g.fillCircle(cx + 2, cy + 3, 4);
+    // Bright highlight puffs on top
+    g.fillStyle(col2, 1);
+    g.fillCircle(cx - 3, cy - 1, 3);
+    g.fillCircle(cx + 3, cy,     3);
+    g.fillCircle(cx,     cy - 3, 3);
   }
 
   update() {

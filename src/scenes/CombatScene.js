@@ -100,8 +100,10 @@ export default class CombatScene extends Phaser.Scene {
 
   // ── History button ────────────────────────────────────────────────────────
   _buildHistBtn() {
-    const { width, height } = this.scale;
-    const bx = width - 8, by = Math.round(height / 2);
+    const { width } = this.scale;
+    const TOP_BAR_H = 40;
+    const bx = width - 8;
+    const by = TOP_BAR_H + 26;  // just below the resource bar
     const W  = 28, H = 34;
 
     // Drawn logbook — redrawn on hover/state change

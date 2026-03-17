@@ -49,13 +49,25 @@ export const BUILDING_DEFS = {
     cost: { food: 0, metal: 100, fuel: 100 },
     buildTime: 15000,
     drawIcon(gfx, cx, cy) {
-      // Simple cross (crop rows)
-      gfx.fillStyle(0x88cc44, 1);
-      gfx.fillRect(cx - 2, cy - 12, 4, 24);
-      gfx.fillRect(cx - 12, cy - 2, 24, 4);
-      // Small circle centre
-      gfx.fillStyle(0xccee88, 1);
-      gfx.fillCircle(cx, cy, 4);
+      // Space moss cloud — layered green puffs
+      const dark = 0x558822, mid = 0x88cc44, bright = 0xaee060;
+      // Shadow base
+      gfx.fillStyle(dark, 1);
+      gfx.fillCircle(cx - 3, cy + 5, 5);
+      gfx.fillCircle(cx + 3, cy + 5, 5);
+      gfx.fillCircle(cx,     cy + 6, 5);
+      // Main body
+      gfx.fillStyle(mid, 1);
+      gfx.fillCircle(cx - 5, cy + 2, 5);
+      gfx.fillCircle(cx + 5, cy + 2, 5);
+      gfx.fillCircle(cx,     cy,     5);
+      gfx.fillCircle(cx - 3, cy + 5, 4);
+      gfx.fillCircle(cx + 3, cy + 5, 4);
+      // Bright highlight puffs
+      gfx.fillStyle(bright, 1);
+      gfx.fillCircle(cx - 4, cy - 1, 3);
+      gfx.fillCircle(cx + 4, cy,     3);
+      gfx.fillCircle(cx,     cy - 3, 3);
     },
   },
   metal_extractor: {
@@ -337,9 +349,9 @@ export default class NodePanel extends Phaser.Scene {
     // Resource bars
     this.resBars = {};
     const resources = [
-      { key: 'food',  label: '🌾 Food',  color: 0x88cc44 },
-      { key: 'metal', label: '⚙ Metal',  color: 0x8888cc },  // icon drawn separately
-      { key: 'fuel',  label: '⛽ Fuel',  color: 0xcc8844 },
+      { key: 'food',  label: 'Food',  color: 0x88cc44 },
+      { key: 'metal', label: 'Metal', color: 0x8888cc },
+      { key: 'fuel',  label: 'Fuel',  color: 0xcc8844 },
     ];
     resources.forEach(({ key, label, color }, i) => {
       const rowY = y + 42 + i * 22;
@@ -347,9 +359,14 @@ export default class NodePanel extends Phaser.Scene {
       const barW = 120;
 
       if (key === 'metal') {
-        // Drawn gear icon to match UIScene — sits at same x as emoji icons
         this._drawMetalIcon(x + 6, rowY + 5, color);
         this.root.add(this.add.text(x + 18, rowY, 'Metal', { font: '10px monospace', color: '#7aaa8a' }));
+      } else if (key === 'fuel') {
+        this._drawFuelIcon(x + 6, rowY + 5, color);
+        this.root.add(this.add.text(x + 18, rowY, 'Fuel', { font: '10px monospace', color: '#7aaa8a' }));
+      } else if (key === 'food') {
+        this._drawFoodIcon(x + 6, rowY + 5, color);
+        this.root.add(this.add.text(x + 18, rowY, 'Food', { font: '10px monospace', color: '#7aaa8a' }));
       } else {
         this.root.add(this.add.text(x, rowY, label, { font: '10px monospace', color: '#7aaa8a' }));
       }
@@ -420,18 +437,52 @@ export default class NodePanel extends Phaser.Scene {
       ? parseInt(hexColor.replace('#', ''), 16)
       : hexColor;
     const g = this.add.graphics();
-    // Scaled down to match emoji icon footprint (~10px wide)
     g.fillStyle(col, 1);
-    g.fillRect(cx - 3, cy - 5, 6, 10);   // vertical bar
-    g.fillRect(cx - 5, cy - 3, 10, 6);   // horizontal bar
-    // Corner cuts to octagon
+    g.fillRect(cx - 3, cy - 5, 6, 10);
+    g.fillRect(cx - 5, cy - 3, 10, 6);
     g.fillStyle(0x080c14, 1);
     g.fillTriangle(cx - 3, cy - 5,  cx - 5, cy - 3,  cx - 3, cy - 3);
     g.fillTriangle(cx + 3, cy - 5,  cx + 5, cy - 3,  cx + 3, cy - 3);
     g.fillTriangle(cx - 3, cy + 5,  cx - 5, cy + 3,  cx - 3, cy + 3);
     g.fillTriangle(cx + 3, cy + 5,  cx + 5, cy + 3,  cx + 3, cy + 3);
-    // Hollow centre
     g.fillCircle(cx, cy, 2);
+    this.root.add(g);
+  }
+
+  _drawFuelIcon(cx, cy, hexColor) {
+    const col  = typeof hexColor === 'string' ? parseInt(hexColor.replace('#', ''), 16) : hexColor;
+    const g    = this.add.graphics();
+    // Outer flame
+    g.fillStyle(col, 1);
+    g.fillTriangle(cx, cy - 6, cx - 4, cy + 4, cx + 4, cy + 4);
+    // Inner bright core
+    g.fillStyle(0xffcc44, 1);
+    g.fillTriangle(cx, cy - 1, cx - 2, cy + 4, cx + 2, cy + 4);
+    this.root.add(g);
+  }
+
+  _drawFoodIcon(cx, cy, hexColor) {
+    const col  = typeof hexColor === 'string' ? parseInt(hexColor.replace('#', ''), 16) : hexColor;
+    const col2 = 0xaee060;
+    const col3 = 0x558822;
+    const g    = this.add.graphics();
+    // Dark base shadow
+    g.fillStyle(col3, 1);
+    g.fillCircle(cx - 2, cy + 3, 3);
+    g.fillCircle(cx + 2, cy + 3, 3);
+    g.fillCircle(cx,     cy + 4, 3);
+    // Main cloud body
+    g.fillStyle(col, 1);
+    g.fillCircle(cx - 3, cy + 1, 3);
+    g.fillCircle(cx + 3, cy + 1, 3);
+    g.fillCircle(cx,     cy - 1, 3);
+    g.fillCircle(cx - 1, cy + 3, 3);
+    g.fillCircle(cx + 1, cy + 3, 3);
+    // Bright highlight puffs
+    g.fillStyle(col2, 1);
+    g.fillCircle(cx - 2, cy,     2);
+    g.fillCircle(cx + 2, cy + 1, 2);
+    g.fillCircle(cx,     cy - 2, 2);
     this.root.add(g);
   }
 
@@ -761,24 +812,23 @@ export default class NodePanel extends Phaser.Scene {
       divGfx.lineBetween(ox + 10, oy + 90, ox + OPT_W - 10, oy + 90);
       this._modalOptions.add(divGfx);
 
-      // ── Stacked cost rows — red if can't afford ────────────────────────
       const costItems = [
-        { resKey: 'food',  icon: '🌾', val: cost.food,  baseColor: '#88cc44', isMetal: false },
-        { resKey: 'metal', icon: '⚙',  val: cost.metal, baseColor: '#8888cc', isMetal: true  },
-        { resKey: 'fuel',  icon: '⛽', val: cost.fuel,  baseColor: '#cc8844', isMetal: false },
+        { resKey: 'food',  val: cost.food,  baseColor: '#88cc44' },
+        { resKey: 'metal', val: cost.metal, baseColor: '#8888cc' },
+        { resKey: 'fuel',  val: cost.fuel,  baseColor: '#cc8844' },
       ];
-      costItems.forEach(({ resKey, icon, val, baseColor, isMetal }, ci) => {
+      costItems.forEach(({ resKey, val, baseColor }, ci) => {
         const rowY  = oy + 90 + ci * 16;
         const iconX = ox + 10;
         const valX  = ox + 28;
         const insufficient = !alreadyBuilt && (res[resKey] < val);
         const color = alreadyBuilt ? '#223344' : insufficient ? '#ff4444' : baseColor;
         const numCol = parseInt(color.replace('#',''), 16);
+        const icx = iconX + 5, icy = rowY + 6;
+        const mg = this.add.graphics();
 
-        if (isMetal) {
-          const mg = this.add.graphics();
+        if (resKey === 'metal') {
           mg.fillStyle(numCol, 1);
-          const icx = iconX + 5, icy = rowY + 6;
           mg.fillRect(icx-3, icy-5, 6, 10); mg.fillRect(icx-5, icy-3, 10, 6);
           mg.fillStyle(0x0d1422, 1);
           mg.fillTriangle(icx-3,icy-5, icx-5,icy-3, icx-3,icy-3);
@@ -786,12 +836,22 @@ export default class NodePanel extends Phaser.Scene {
           mg.fillTriangle(icx-3,icy+5, icx-5,icy+3, icx-3,icy+3);
           mg.fillTriangle(icx+3,icy+5, icx+5,icy+3, icx+3,icy+3);
           mg.fillCircle(icx, icy, 2);
-          this._modalOptions.add(mg);
-        } else {
-          this._modalOptions.add(this.add.text(iconX, rowY, icon, {
-            font: '10px monospace', color
-          }));
+        } else if (resKey === 'fuel') {
+          mg.fillStyle(numCol, 1);
+          mg.fillTriangle(icx, icy - 6, icx - 4, icy + 4, icx + 4, icy + 4);
+          mg.fillStyle(0xffcc44, 1);
+          mg.fillTriangle(icx, icy - 1, icx - 2, icy + 4, icx + 2, icy + 4);
+        } else { // food
+          mg.fillStyle(0x558822, 1);
+          mg.fillCircle(icx - 2, icy + 3, 3); mg.fillCircle(icx + 2, icy + 3, 3);
+          mg.fillStyle(numCol, 1);
+          mg.fillCircle(icx - 3, icy + 1, 3); mg.fillCircle(icx + 3, icy + 1, 3);
+          mg.fillCircle(icx,     icy - 1, 3);  mg.fillCircle(icx,     icy + 3, 3);
+          mg.fillStyle(0xaee060, 1);
+          mg.fillCircle(icx - 2, icy,     2); mg.fillCircle(icx + 2, icy + 1, 2);
+          mg.fillCircle(icx,     icy - 3, 2);
         }
+        this._modalOptions.add(mg);
         this._modalOptions.add(this.add.text(valX, rowY + 1, String(val), {
           font: 'bold 10px monospace', color
         }));
