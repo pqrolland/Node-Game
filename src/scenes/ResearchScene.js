@@ -547,7 +547,7 @@ const TREE_DEFS = [
       { id: 'f_04', name: 'Wingman Protocol',   icon: PERK_ICONS['Wingman Protocol'],   desc: 'Each Fighter has a 10% chance to dodge one hit per Main Strike phase.', tested: true },
       { id: 'f_05', name: 'Ace Pilots',         icon: PERK_ICONS['Ace Pilots'],         desc: 'Each Fighter deals double damage against Destroyers.', tested: true },
       { id: 'f_06', name: 'Swarm Tactics',      icon: PERK_ICONS['Swarm Tactics'],      desc: 'Each Fighter gains +1 attack when in a stack of only Fighters.', tested: true },
-      { id: 'f_07', name: 'Interceptor Role',   icon: PERK_ICONS['Interceptor Role'],   desc: 'Each Fighter destroyed by Pre-Strike abilities deals its damage back to the attacker in the Pre-Strike Resolution phase.' },
+      { id: 'f_07', name: 'Interceptor Role',   icon: PERK_ICONS['Interceptor Role'],   desc: 'Each Fighter destroyed by Pre-Strike abilities deals its damage back to the attacker in the Pre-Strike Resolution phase.', tested: true },
       { id: 'f_08', name: 'First Strike',       icon: PERK_ICONS['First Strike'],       desc: 'Each Fighter gains a Pre-Strike of 1 damage.', tested: true },
       { id: 'f_09', name: 'Air Superiority',    icon: PERK_ICONS['Air Superiority'],    desc: 'Stack of Fighters gains +1 attack per adjacent friendly planet.' },
       { id: 'f_10', name: 'Kamikaze Protocol',  icon: PERK_ICONS['Kamikaze Protocol'],  desc: 'Each Fighter destroyed in combat has a 50% chance to deal its damage to the attacker in the Main Strike Resolution phase.', tested: true },
@@ -581,7 +581,7 @@ const TREE_DEFS = [
     pool: [
       { id: 'c_01', name: 'Field Medics',       icon: PERK_ICONS['Field Medics'],       desc: 'Cruiser repair chance increases from 50% to 65%.', tested: true },
       { id: 'c_02', name: 'Reinforced Hull',    icon: PERK_ICONS['Reinforced Hull'],    desc: 'Each Cruiser gains +10 HP.', tested: true },
-      { id: 'c_03', name: 'Nanite Repair',      icon: PERK_ICONS['Nanite Repair'],      desc: 'After each combat phase, damaged (not destroyed) Cruisers have a 30% chance to be restored to full HP.' },
+      { id: 'c_03', name: 'Nanite Repair',      icon: PERK_ICONS['Nanite Repair'],      desc: 'After each combat phase, damaged (not destroyed) Cruisers have a 30% chance to be restored to full HP.', tested: true },
       { id: 'c_04', name: 'Escort Formation',   icon: PERK_ICONS['Escort Formation'],   desc: 'Each Cruiser absorbs one hit directed at the Flagship per Main Strike round.' },
       { id: 'c_05', name: 'Regeneration Field', icon: PERK_ICONS['Regeneration Field'], desc: 'Each friendly ship in a stack with a Cruiser gains +5 HP.' },
       { id: 'c_06', name: 'Hunter Protocol',    icon: PERK_ICONS['Hunter Protocol'],    desc: 'Each Cruiser deals +5 damage against Dreadnaughts and Flagships.', tested: true },
@@ -600,9 +600,9 @@ const TREE_DEFS = [
     pool: [
       { id: 'dr_01', name: 'Siege Cannons',   icon: PERK_ICONS['Siege Cannons'],   desc: 'Each Dreadnaught\'s attack increases by +5 damage.', tested: true },
       { id: 'dr_02', name: 'Reinforced Hull', icon: PERK_ICONS['Reinforced Hull'], desc: 'Each Dreadnaught gains +15 HP.', tested: true },
-      { id: 'dr_03', name: 'Orbital Strike',  icon: PERK_ICONS['Orbital Strike'],  desc: 'Dreadnaught stacks deal 5 Pre-Strike damage to all enemies.' },
+      { id: 'dr_03', name: 'Orbital Strike',  icon: PERK_ICONS['Orbital Strike'],  desc: 'Dreadnaught stacks deal 5 Pre-Strike damage to all enemies.', tested: true },
       { id: 'dr_04', name: 'Afterburner',     icon: PERK_ICONS['Afterburner'],     desc: 'Each Dreadnaught increases stack movement speed by 10%.' },
-      { id: 'dr_05', name: 'Mass Driver',     icon: PERK_ICONS['Mass Driver'],     desc: 'When a Dreadnaught is alone in a stack, its attacks count as 30 damage × 3.' },
+      { id: 'dr_05', name: 'Mass Driver',     icon: PERK_ICONS['Mass Driver'],     desc: 'When a Dreadnaught is alone in a stack, its attacks count as 30 damage × 3.', tested: true },
       { id: 'dr_06', name: 'Wingman Protocol',icon: PERK_ICONS['Wingman Protocol'],desc: 'Each Dreadnaught has a 10% chance to dodge one hit per Main Strike phase.', tested: true },
       { id: 'dr_07', name: 'Last Stand',      icon: PERK_ICONS['Last Stand'],      desc: 'Each Dreadnaught deals +5 damage when their stack is outnumbered.', tested: true },
       { id: 'dr_08', name: 'Rapid Scramble',  icon: PERK_ICONS['Rapid Scramble'],  desc: 'Dreadnaughts launch 30% faster from Dreadnaught Factories.' },
@@ -623,9 +623,9 @@ const TREE_DEFS = [
       { id: 'fl_04', name: 'Reinforced Hull',   icon: PERK_ICONS['Reinforced Hull'],   desc: 'Each Flagship gains +50 HP.', tested: true },
       { id: 'fl_05', name: 'Last Stand',        icon: PERK_ICONS['Last Stand'],        desc: 'Each Flagship deals +10 damage and attacks 1 additional time when their stack is outnumbered.', tested: true },
       { id: 'fl_06', name: 'First Strike',      icon: PERK_ICONS['First Strike'],      desc: 'Each Flagship gains a Pre-Strike of 20 damage.', tested: true },
-      { id: 'fl_07', name: 'Iron Reserve',      icon: PERK_ICONS['Iron Reserve'],      desc: 'Each Flagship generates +5 Food, Metal, and Fuel per resource tick.' },
+      { id: 'fl_07', name: 'Iron Reserve',      icon: PERK_ICONS['Iron Reserve'],      desc: 'Each Flagship generates +5 Food, Metal, and Fuel per resource tick.', tested: true },
       { id: 'fl_08', name: 'Hunter Protocol',   icon: PERK_ICONS['Hunter Protocol'],   desc: 'Each Flagship deals +15 damage against Dreadnaughts and Flagships.', tested: true },
-      { id: 'fl_09', name: 'Naval Construction',icon: PERK_ICONS['Naval Construction'],desc: 'Each Flagship produces 1 Fighter every 30 seconds.' },
+      { id: 'fl_09', name: 'Naval Construction',icon: PERK_ICONS['Naval Construction'],desc: 'Each Flagship produces 1 Fighter every 30 seconds.', tested: true },
       { id: 'fl_10', name: 'Spearhead',         icon: PERK_ICONS['Spearhead'],         desc: 'Each Flagship gains a Pre-Strike of 10 damage directed at an enemy Flagship, or a random ship if no enemy Flagship is present.' },
     ],
   },
@@ -750,7 +750,8 @@ export default class ResearchScene extends Phaser.Scene {
 
     this.game.events.on('openResearch',  () => this._open());
     this.game.events.on('closeResearch', () => this._close());
-    this.game.events.on('researchAddRP', (amt) => this._addRP(amt));
+    this.game.events.removeListener('researchAddRP');
+    this.game.events.on('researchAddRP', (amt) => this._addRP(amt), this);
 
     this._activeTrees.forEach(t => this.unlocked.add(t.root.id));
   }

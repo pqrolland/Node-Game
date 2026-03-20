@@ -293,19 +293,22 @@ In **Test Environment** mode, a side panel lists all 80 perks and lets you unloc
 | **Hunter Protocol** | Destroyer / Cruiser / Flagship | Bonus damage vs Dreadnaughts and Flagships (+2 / +5 / +15) |
 | **Last Stand** | Destroyer / Cruiser / Dreadnaught / Flagship | Bonus damage when outnumbered (+2 / +2 / +5 / +10 dmg, Flagship also gains +1 attack) |
 | **First Strike** | Fighter / Dreadnaught / Flagship | Pre-Strike hit before main combat (1 / 5 / 20 damage per ship) |
+| **Ace Pilots** | Fighter / Destroyer / Cruiser | Double damage when enemy has Destroyers alive |
+| **Orbital Strike** | Dreadnaught | Stack deals 5 Pre-Strike damage to every enemy ship |
+| **Torpedo Spread** | Destroyer | Pre-Strike barrage expands to hit all ship types (15 dmg/shot) instead of fighters only |
+| **Kamikaze Protocol** | Fighter | 50% chance to retaliate when destroyed in Main Strike |
+| **Nanite Repair** | Cruiser | Damaged (not destroyed) Cruisers have a 30% chance to restore to full HP each phase |
+| **Interceptor Role** | Fighter | Fighters destroyed by Pre-Strike retaliate (50% chance each) |
+| **Mass Driver** | Dreadnaught | When exactly 1 Dreadnaught is in the stack, it fires 30 dmg × 3 instead of 20 dmg × 2 |
+| **Emergency Shield** | Flagship | Flagship survives the first lethal hit per battle |
+| **Iron Reserve** | Flagship | Each Flagship stack generates +5 Food, Metal, and Fuel per resource tick |
+| **Naval Construction** | Flagship | Each Flagship produces 1 Fighter every 30 seconds |
 
 ### ⚗ Implemented — Ready to Test
-
-| Perk | Tree | Effect |
-|---|---|---|
-| **Ace Pilots** | Fighter / Destroyer / Cruiser | Double damage when enemy has Destroyers alive |
-| **Orbital Strike** | Dreadnaught | Each Dreadnaught deals 5 Pre-Strike damage to every enemy ship |
-| **Torpedo Spread** | Destroyer | Pre-Strike barrage expands to hit all ship types (15 dmg/shot) instead of fighters only |
-| **Kamikaze Protocol** | Fighter | Each Fighter destroyed in Main Strike has a 50% chance to retaliate for full damage |
-| **Nanite Repair** | Cruiser | Damaged (not destroyed) Cruisers have a 30% chance to restore to full HP each phase |
+Remaining perks in progress — shown with ✕ badge in the Research overlay. Use the Test Environment cheat panel to unlock any perk instantly for verification.
 
 ### ✕ Not Yet Implemented
-55 further perks across all 8 trees — shown with a red **✕** badge in the Research overlay.
+~44 further perks across all 8 trees.
 
 ---
 
@@ -328,13 +331,16 @@ Multiple rounds can be expanded simultaneously. The log and its expanded state p
 Make each playthrough strategically distinct before adding players.
 
 | Feature | Status | Notes |
-|---|---|---|\n| Research Tree | ✅ In Progress | 80 perks across 8 trees. 16 tested & active, 5 awaiting test. Pool-based RP spending. |
-| Ship Upgrades | ✅ In Progress | 21 combat perks live across all ship types. |
+|---|---|---|
+| Research Tree | ✅ In Progress | 80 perks across 8 trees. 21 tested & active. Pool-based RP spending. Test cheat panel for instant unlock. |
+| Ship Upgrades | ✅ In Progress | 21 combat perks live across all ship types. ~44 remaining. |
+| Multi-Team Resource Tracking | 🔜 Next | Currently only player resources are tracked. All teams need food/metal/fuel to enable AI build decisions and a team stats screen. |
+| Team Stats Screen | 🔜 Next | In-game overlay showing resources, fleet strength, planet count, and tech for all active teams. Foundation for AI and spectator mode. |
 | Building Upgrades + Planetary Power | Planned | Energy capacity per planet forces meaningful build decisions. |
 | Missile Carriers | Planned | Ranged unit using the existing projectile system. New combat dimension. |
 | Planetary Defense | Planned | Building with intercept radius. Counters missile carriers and meteors. |
 | Win Condition | Planned | Destroy all enemy flagships or capture a threshold of planets. |
-| Lightweight AI | Planned | Expand-nearest + attack-weakest. Enough to test solo. Deepen post-multiplayer. |
+| Lightweight AI | Planned | Expand-nearest + attack-weakest. Requires multi-team resource tracking first. |
 
 ### Phase B — Close the Loop
 Make the game playable end-to-end.

@@ -433,7 +433,8 @@ export default class GameScene extends Phaser.Scene {
   // A node is owned by the last team to have had majority — once claimed it stays
   // claimed until another team gains majority.
   updateOwnership(nodeId) {
-    const stacks = this.units.filter(u => u.currentNode === nodeId && !u.isMoving);
+    // Only count units that are idle at this node — not moving and not locked in combat
+    const stacks = this.units.filter(u => u.currentNode === nodeId && !u.isMoving && !u.inCombat);
 
     // Tally units per team at this node
     const tally = {};
@@ -794,6 +795,16 @@ export default class GameScene extends Phaser.Scene {
     if (this.resourceTickTimer < this.RESOURCE_TICK_MS) return;
     this.resourceTickTimer -= this.RESOURCE_TICK_MS;
 
+    // Perk hook: Iron Reserve — accrued first so any HUD update includes it
+    if (this.perkManager?._has('player', 'fl_07')) {
+      const flagshipCount = this.units.filter(u => u.team === 'player' && !u._dead && (u.composition?.flagship || 0) > 0).length;
+      if (flagshipCount > 0) {
+        this.resources.food  += 5 * flagshipCount;
+        this.resources.metal += 5 * flagshipCount;
+        this.resources.fuel  += 5 * flagshipCount;
+      }
+    }
+
     // Sum resources from every planet owned by 'player'
     this.nodeOwnership.forEach((team, nodeId) => {
       if (team !== 'player') return;
@@ -829,7 +840,7 @@ export default class GameScene extends Phaser.Scene {
 
         const shipType = prod.shipType || 'fighter';
         const node     = this.nodeMap.get(nodeId);
-        const stacks   = this.units.filter(u => u.team === owner && u.currentNode === nodeId && !u.isMoving);
+        const stacks   = this.units.filter(u => u.team === owner && u.currentNode === nodeId && !u.isMoving && !u.inCombat);
         if (stacks.length > 0) {
           stacks.sort((a, b) => b.stackSize - a.stackSize);
           stacks[0].composition[shipType] = (stacks[0].composition[shipType] || 0) + 1;
@@ -844,6 +855,25 @@ export default class GameScene extends Phaser.Scene {
         this.updateHUD();
       }
     });
+
+    // Perk hook: Naval Construction — each player flagship produces 1 fighter every 30s
+    if (this.perkManager?._has('player', 'fl_09')) {
+      if (!this._navalConstructionTimers) this._navalConstructionTimers = new Map();
+      for (const unit of this.units) {
+        if (unit.team !== 'player' || unit._dead || (unit.composition?.flagship || 0) === 0) continue;
+        const id = unit.id ?? unit;
+        const elapsed = (this._navalConstructionTimers.get(id) ?? 0) + delta;
+        if (elapsed >= 30000) {
+          this._navalConstructionTimers.set(id, elapsed - 30000);
+          unit.composition.fighter = (unit.composition.fighter || 0) + 1;
+          unit.stackSize++;
+          unit.updateBadge();
+          syncUnitHP(unit, this.perkManager);
+        } else {
+          this._navalConstructionTimers.set(id, elapsed);
+        }
+      }
+    }
   }
 
   // Recalculates planet count + total units and pushes everything to UIScene
@@ -879,6 +909,19 @@ export default class GameScene extends Phaser.Scene {
         fuel:  node.fuel  || 0,
       });
     });
+
+    // Iron Reserve — add as a separate breakdown source so tooltip shows it
+    if (this.perkManager?._has('player', 'fl_07')) {
+      const flagshipCount = this.units.filter(u => u.team === 'player' && !u._dead && (u.composition?.flagship || 0) > 0).length;
+      if (flagshipCount > 0) {
+        breakdown.push({
+          label: `Iron Reserve (×${flagshipCount})`,
+          food:  5 * flagshipCount,
+          metal: 5 * flagshipCount,
+          fuel:  5 * flagshipCount,
+        });
+      }
+    }
 
     ui.updatePlayerInfo('Player 1', planetCount, typeCounts);
     ui.updateResources({

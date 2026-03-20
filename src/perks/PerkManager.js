@@ -245,8 +245,18 @@ export default class PerkManager {
     return hits;
   }
 
-  // Phase 3: Modify attack queue entries (damage bonuses per ship type)
-  // enemy is passed so Last Stand, Hunter Protocol, and Ace Pilots can inspect enemy composition
+  // Phase 1: Interceptor Role — fighters killed by pre-strike retaliate (50% each)
+  getInterceptorHits(unit, fighterDeaths) {
+    if (!this._has(unit.team, 'f_07') || fighterDeaths === 0) return { hits: [], triggered: 0, total: 0 };
+    const CHANCE = 0.50;
+    const hits = [];
+    for (let i = 0; i < fighterDeaths; i++) {
+      if (Math.random() < CHANCE) hits.push({ damage: SHIP_STATS['fighter'].damage });
+    }
+    return { hits, triggered: hits.length, total: fighterDeaths, chance: CHANCE };
+  }
+
+  // Phase 3: Modify attack queue — also handles Mass Driver
   buildAttackQueue(unit, enemy, baseQueue) {
     if (baseQueue.length === 0) return baseQueue;
     const team = unit.team;
@@ -268,7 +278,10 @@ export default class PerkManager {
       .filter(t => t !== 'fighter')
       .every(t => (unit.composition[t] || 0) === 0);
 
-    return baseQueue.map(entry => {
+    // Pure-dreadnaught check for Mass Driver — exactly 1 dreadnaught in stack
+    const singleDreadnaught = (unit.composition?.dreadnaught ?? 0) === 1;
+
+    const mappedEntries = baseQueue.map(entry => {
       let dmg    = entry.damage;
       const type = entry.shipType;
 
@@ -279,6 +292,10 @@ export default class PerkManager {
 
       // Siege Cannons — Dreadnaught +5 damage
       if (type === 'dreadnaught' && this._has(team, 'dr_01')) dmg += 5;
+
+      // Mass Driver — single dreadnaught in stack: replace all its attacks with 30dmg×3
+      // We set damage to 30 here; the flatMap below adds the 3rd entry (base is 2 attacks)
+      if (type === 'dreadnaught' && this._has(team, 'dr_05') && singleDreadnaught) dmg = Math.max(dmg, 30);
 
       // Hunter Protocol — bonus vs Dreadnaughts / Flagships
       if (enemyHasHeavy) {
@@ -306,13 +323,45 @@ export default class PerkManager {
       }
 
       return { ...entry, damage: dmg };
-    }).flatMap(entry => {
+    });
+
+    let massDriveExtraAdded = false;
+    return mappedEntries.flatMap(entry => {
       // Last Stand Flagship — +1 extra attack when outnumbered
       if (outnumbered && entry.shipType === 'flagship' && this._has(team, 'fl_05')) {
         return [entry, { ...entry }];
       }
+      // Mass Driver — add exactly one extra attack for the single dreadnaught (base 2 + 1 = 3)
+      if (entry.shipType === 'dreadnaught' && this._has(team, 'dr_05') && singleDreadnaught && !massDriveExtraAdded) {
+        massDriveExtraAdded = true;
+        return [entry, { ...entry }];
+      }
       return [entry];
     });
+  }
+
+  // Phase 4: Emergency Shield — flagship survives first lethal hit per battle
+  // Scans flagship HP entries, sets any at <=0 to 1 HP if shield hasn't fired yet.
+  // Uses battle object to track per-battle usage. Returns true if it fired.
+  applyEmergencyShield(unit, battle) {
+    if (!this._has(unit.team, 'fl_02')) return false;
+    const hps = unit.unitHP?.flagship;
+    if (!hps) return false;
+
+    // Track per-battle, per-team shield usage
+    if (!battle._shieldUsed) battle._shieldUsed = {};
+    if (battle._shieldUsed[unit.team]) return false;
+
+    let fired = false;
+    for (let i = 0; i < hps.length; i++) {
+      if (hps[i] <= 0) {
+        hps[i] = 1;
+        fired = true;
+        break; // only save one flagship per trigger
+      }
+    }
+    if (fired) battle._shieldUsed[unit.team] = true;
+    return fired;
   }
 
   // Phase 4: Wingman Protocol — roll dodge for each incoming hit on qualifying ships

@@ -166,7 +166,13 @@
       <p>Every time a new unit type is added, tooltips must be wired in all locations: the Planet Units section of NodePanel, the Build Modal card, and any panel where the unit is referenced by name. This is a standing rule, not a one-off task.</p>
     </div>
     <div class="note-item">
-      <h3>Projectile Architecture</h3>
+      <h3>Multi-Team Resources</h3>
+      <p>Currently only the player's resources (food/metal/fuel) are tracked in <code>GameScene.resources</code>. All teams need their own resource pool so AI can make build decisions (construct buildings, produce units based on affordability) and a team stats overlay can display comparative state. Implementation: extend <code>resources</code> to a Map keyed by team, tick all owned nodes per team, wire building cost deduction and production gating per team.</p>
+    </div>
+    <div class="note-item">
+      <h3>Team Stats Screen</h3>
+      <p>An in-game overlay (toggleable from the HUD) showing for each active team: current resources, total fleet size by ship type, planet count + types, and researched perks. This serves as both a player information tool and the data foundation the AI will query when making decisions. Should be built immediately after multi-team resource tracking is live.</p>
+    </div>
       <p>AsteroidManager is the template for any free-moving object. Missiles follow the same pattern: spawn on event, move each update(), check arrival/intercept, fire resolution event. Planetary Defense buildings are radius checks run in the same update loop.</p>
     </div>
     <div class="note-item">
@@ -368,18 +374,21 @@ const phaseA = [
   { done: true,  title: 'Overkill prevention',         desc: 'Staged damage excludes already-doomed ships — no wasted attacks' },
   { done: true,  title: 'Cruiser repair',              desc: '50% per dead cruiser to respawn at full HP in Phase 4 only' },
   { done: true,  title: 'Full heal on battle end',     desc: 'Surviving ships restored to max HP — damage never carries between battles' },
-  { done: true,  title: 'Combat overlay + window',     desc: 'Pill badges, arc countdown, HP bars, phase-labelled battle log' },
+  { done: true,  title: 'Combat overlay + window',     desc: 'Pill badges, arc countdown, HP bars, phase-labelled battle log with verbose hit detail' },
+  { done: true,  title: 'Battle history log',          desc: 'Post-battle log viewer with per-round expandable hit detail, scrollable, persisted in session' },
   { done: true,  title: 'Mid-battle reinforcements',   desc: 'Friendly units arriving merge seamlessly into next round' },
-  { done: true,  title: 'Planet ownership',            desc: 'Rings, capture, ownership persistence' },
-  { done: true,  title: 'Resource system',             desc: 'Food/metal/fuel ticks from owned planets' },
+  { done: true,  title: 'Planet ownership',            desc: 'Rings, capture, ownership persistence. Combat units excluded from ownership tally.' },
+  { done: true,  title: 'Resource system',             desc: 'Food/metal/fuel ticks from owned planets. Asteroid miner deposits only credit planet owner.' },
   { done: true,  title: 'Buildings + construction',    desc: '8 buildings, timers, cost deduction' },
-  { done: true,  title: 'Unit production',             desc: 'Factories spawn ships on timers' },
+  { done: true,  title: 'Unit production',             desc: 'Factories spawn ships on timers for all teams' },
   { done: true,  title: 'Ship types + composition',    desc: '5 ship types with distinct HP/damage/attacks stats' },
   { done: true,  title: 'Flagship / game over',        desc: 'Lose when flagship is destroyed' },
   { done: true,  title: 'Asteroid system',             desc: '3 types: regular, rich, meteor with impact' },
-  { done: true,  title: 'Asteroid miners',             desc: 'Autonomous unit, meteor intercept, deposit' },
-  { done: false, title: 'Research tree',               desc: 'Unlocks ship upgrades + building tiers. Core replayability.' },
-  { done: false, title: 'Ship upgrades',               desc: 'Pairs with Research — fleet identity each game.' },
+  { done: true,  title: 'Asteroid miners',             desc: 'Autonomous unit, meteor intercept, deposit (player-owned planets only)' },
+  { done: true,  title: 'Research tree',               desc: '80 perks across 8 trees. 21 tested & active. Test cheat panel for instant unlock.' },
+  { done: true,  title: 'Ship upgrades (combat)',      desc: '21 perks live: damage, HP, dodge, pre-strike, repair, production, economy. ~44 remaining.' },
+  { done: false, title: 'Multi-team resource tracking', desc: 'All teams need food/metal/fuel tracked for AI build decisions and stats screen.' },
+  { done: false, title: 'Team stats screen',           desc: 'In-game overlay: resources, fleet size, planet count, tech per team.' },
   { done: false, title: 'Building upgrades + Power',   desc: 'Energy cap per planet forces hard build choices.' },
   { done: false, title: 'Missile carriers',            desc: 'Ranged unit using projectile system.' },
   { done: false, title: 'Planetary defense',           desc: 'Building with intercept radius. Counters missiles + meteors.' },
@@ -387,7 +396,7 @@ const phaseA = [
 ];
 
 const phaseB = [
-  { done: false, title: 'Lightweight AI',            desc: 'Expand-nearest + attack-weakest. Enough for solo testing.' },
+  { done: false, title: 'Lightweight AI',            desc: 'Expand-nearest + attack-weakest. Requires multi-team resource tracking.' },
   { done: false, title: 'Hotseat multiplayer',       desc: 'Shared browser, turn indicator. No networking needed.' },
   { done: false, title: 'Sound effects',             desc: 'Combat, production, capture, impact.' },
 ];

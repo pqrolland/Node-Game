@@ -217,13 +217,25 @@ export default class CombatManager {
     const atkOrbitalBuf = atkOrbitalDmg > 0 ? _stageOrbitalStrike(atkOrbitalDmg, defender.unitHP) : [];
     const defOrbitalBuf = defOrbitalDmg > 0 ? _stageOrbitalStrike(defOrbitalDmg, attacker.unitHP) : [];
 
-    // Apply all pre-strike buffers, prune dead, log results
+    // Apply all pre-strike buffers
     _applyBuffer(atkBarrageBuf, defender.unitHP);
     _applyBuffer(defBarrageBuf, attacker.unitHP);
     _applyBuffer(atkFSBuf, defender.unitHP);
     _applyBuffer(defFSBuf, attacker.unitHP);
     _applyBuffer(atkOrbitalBuf, defender.unitHP);
     _applyBuffer(defOrbitalBuf, attacker.unitHP);
+
+    // Perk hook: Interceptor Role — fighters killed by pre-strike retaliate before pruning
+    // Count fighter deaths caused by the pre-strike buffers
+    const atkInterceptDeaths = (attacker.unitHP?.fighter?.filter(h => h <= 0).length ?? 0);
+    const defInterceptDeaths = (defender.unitHP?.fighter?.filter(h => h <= 0).length ?? 0);
+    const atkIntercept = this._perks?.getInterceptorHits(attacker, atkInterceptDeaths) ?? { hits: [], triggered: 0 };
+    const defIntercept = this._perks?.getInterceptorHits(defender, defInterceptDeaths) ?? { hits: [], triggered: 0 };
+    const atkInterceptBuf = _stageFirstStrike(atkIntercept.hits, defender.unitHP);
+    const defInterceptBuf = _stageFirstStrike(defIntercept.hits, attacker.unitHP);
+    _applyBuffer(atkInterceptBuf, defender.unitHP);
+    _applyBuffer(defInterceptBuf, attacker.unitHP);
+
     _pruneHP(attacker.unitHP, attacker.composition); attacker.stackSize = _stackSize(attacker.composition);
     _pruneHP(defender.unitHP, defender.composition); defender.stackSize = _stackSize(defender.composition);
 
@@ -238,6 +250,11 @@ export default class CombatManager {
                                        [atkOrbitalBuf, 'Atk', 'Orbital Strike'], [defOrbitalBuf, 'Def', 'Orbital Strike']]) {
       for (const hit of buf) battle.log.push({ round: rnd, phase: 'verbose',
         text: `  ${side} [${label}] → ${side === 'Atk' ? 'Def' : 'Atk'} ${hit.type} #${hit.idx + 1}: ${hit.damage} dmg`,
+        color: '#553366' });
+    }
+    for (const [buf, side] of [[atkInterceptBuf, 'Atk'], [defInterceptBuf, 'Def']]) {
+      for (const hit of buf) battle.log.push({ round: rnd, phase: 'verbose',
+        text: `  ${side} fighter [Interceptor] → ${side === 'Atk' ? 'Def' : 'Atk'} ${hit.type} #${hit.idx + 1}: ${hit.damage} dmg`,
         color: '#553366' });
     }
 
@@ -284,10 +301,20 @@ export default class CombatManager {
         text: `Def [Orbital Strike]: ${drCount} dreadnaught(s) → ${defOrbitalBuf.length} ship(s) hit (${defOrbitalDmg} dmg each)`,
         color: '#aa66ff' });
     }
+    for (const [intercept, interceptBuf, side] of [
+      [atkIntercept, atkInterceptBuf, 'Atk'],
+      [defIntercept, defInterceptBuf, 'Def'],
+    ]) {
+      if (intercept.total > 0) {
+        battle.log.push({ round: rnd, phase: 'prestrike',
+          text: `💢 ${side} [Interceptor]: ${intercept.triggered}/${intercept.total} fighter(s) retaliated (50% chance)`,
+          color: intercept.triggered > 0 ? '#ff8844' : '#664433' });
+      }
+    }
 
     // Early exit if pre-strike ended the battle
     if (!_anyAlive(attacker) || !_anyAlive(defender)) {
-      this._emitRoundUpdate(battle, ui, 0, 0, 0, 0, null, null, null, null, null, null, null, null, null, null);
+      this._emitRoundUpdate(battle, ui, 0, 0, 0, 0, null, null, null, null, null, null, null, null, null, null, false, false);
       return;
     }
 
@@ -330,6 +357,10 @@ export default class CombatManager {
 
     _applyBuffer(defDodge.hits, defender.unitHP);
     _applyBuffer(atkDodge.hits, attacker.unitHP);
+
+    // Perk hook: Emergency Shield — flagship survives first lethal hit per battle
+    const atkShield = this._perks?.applyEmergencyShield(attacker, battle) ?? false;
+    const defShield = this._perks?.applyEmergencyShield(defender, battle) ?? false;
 
     // Perk hook: Kamikaze Protocol — count fighter deaths this phase, stage retaliatory hits
     const atkFightersAfter  = attacker.unitHP?.fighter?.filter(h => h > 0).length ?? 0;
@@ -389,11 +420,12 @@ export default class CombatManager {
       atkDodge, defDodge,
       atkRepairChance, defRepairChance,
       atkKamikaze, defKamikaze,
-      atkNanite, defNanite);
+      atkNanite, defNanite,
+      atkShield, defShield);
   }
 
   // ── Emit round update: write log entries then notify CombatScene ──────────
-  _emitRoundUpdate(battle, ui, atkQLen, defQLen, atkLost, defLost, atkRepair, defRepair, atkDodge, defDodge, atkRepairChance, defRepairChance, atkKamikaze, defKamikaze, atkNanite, defNanite) {
+  _emitRoundUpdate(battle, ui, atkQLen, defQLen, atkLost, defLost, atkRepair, defRepair, atkDodge, defDodge, atkRepairChance, defRepairChance, atkKamikaze, defKamikaze, atkNanite, defNanite, atkShield, defShield) {
     const { attacker, defender } = battle;
     const rnd = battle.roundNumber;
     const aS  = attacker.stackSize;
@@ -429,23 +461,29 @@ export default class CombatManager {
         color: k.triggered > 0 ? '#ff8844' : '#664433' });
     }
 
-    // Cruiser repair (dead → respawn) — only log successes
+    // Cruiser repair — log whenever cruisers died, even if none were repaired
     for (const [r, side, chance] of [[atkRepair, 'Atk', atkRepairChance], [defRepair, 'Def', defRepairChance]]) {
       if (!r || r.dead === 0) continue;
       const pct = chance != null ? ` (${Math.round(chance * 100)}% chance)` : '';
-      if (r.repaired > 0) battle.log.push({ round: rnd, phase: 'resolution',
+      battle.log.push({ round: rnd, phase: 'resolution',
         text: `🔧 ${side} [Cruiser Repair]: ${r.repaired}/${r.dead} destroyed cruiser(s) returned${pct}`,
-        color: '#44ddaa' });
+        color: r.repaired > 0 ? '#44ddaa' : '#336644' });
     }
 
-    // Nanite Repair (damaged → full heal) — only log successes
+    // Nanite Repair — log whenever there were eligible damaged cruisers
     for (const [n, side] of [[atkNanite, 'Atk'], [defNanite, 'Def']]) {
-      if (!n || n.eligible === 0 || n.healed === 0) continue;
+      if (!n || n.eligible === 0) continue;
       const pct = Math.round((n.chance ?? 0.30) * 100);
       battle.log.push({ round: rnd, phase: 'resolution',
         text: `🧬 ${side} [Nanite Repair]: ${n.healed}/${n.eligible} damaged cruiser(s) restored (${pct}% chance)`,
-        color: '#44ddaa' });
+        color: n.healed > 0 ? '#44ddaa' : '#336644' });
     }
+
+    // Emergency Shield — log when it fires
+    if (atkShield) battle.log.push({ round: rnd, phase: 'resolution',
+      text: `🛡 Atk [Emergency Shield]: Flagship survived lethal hit!`, color: '#ffdd44' });
+    if (defShield) battle.log.push({ round: rnd, phase: 'resolution',
+      text: `🛡 Def [Emergency Shield]: Flagship survived lethal hit!`, color: '#ffdd44' });
 
     // Notify CombatScene
     this._scene.game.events.emit('combatUpdate', { battle });

@@ -144,9 +144,10 @@ export default class AsteroidMiner {
   _updateReturning(delta) {
     const arrived = this._moveToward(this.homeNode.x, this.homeNode.y, delta);
     if (arrived) {
-      // Deposit cargo into game resources
       const scene = this._scene;
-      if (this.cargo.food + this.cargo.metal + this.cargo.fuel > 0) {
+      // Only credit resources if the home planet is still player-owned
+      const owner = scene.nodeOwnership?.get(this.homeNode.id);
+      if (owner === 'player' && this.cargo.food + this.cargo.metal + this.cargo.fuel > 0) {
         scene.resources.food  = (scene.resources.food  || 0) + this.cargo.food;
         scene.resources.metal = (scene.resources.metal || 0) + this.cargo.metal;
         scene.resources.fuel  = (scene.resources.fuel  || 0) + this.cargo.fuel;
@@ -154,8 +155,8 @@ export default class AsteroidMiner {
           `⛏ Miner returned: +${this.cargo.food}f +${this.cargo.metal}m +${this.cargo.fuel}fu`
         );
         scene.updateHUD();
-        this.cargo = { food: 0, metal: 0, fuel: 0 };
       }
+      this.cargo = { food: 0, metal: 0, fuel: 0 };
       this.state = 'idle';
     }
   }
