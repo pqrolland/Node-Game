@@ -150,6 +150,36 @@ export default class PerkManager {
   // Returns [{name, desc}] for every perk unlocked by `team` that applies to
   // `shipType`. composition is the stack's composition map (optional) — used
   // to gate 'all' perks (e.g. Command Aura) on flagship presence.
+  // Production speed — returns the effective duration for a factory building.
+  // Rapid Scramble perks: f_01 (naval_base), d_03 (destroyer_factory),
+  //                       c_08 (cruiser_factory), dr_08 (dreadnaught_factory)
+  getRapidScrambleDuration(team, bldId, baseDuration) {
+    const PERK_FOR_BLD = {
+      naval_base:          'f_01',
+      destroyer_factory:   'd_03',
+      cruiser_factory:     'c_08',
+      dreadnaught_factory: 'dr_08',
+    };
+    const perkId = PERK_FOR_BLD[bldId];
+    if (!perkId || !this._has(team, perkId)) return baseDuration;
+    return Math.round(baseDuration * 0.7);
+  }
+
+  // Returns perk info relevant to a specific building, for the building tooltip.
+  getPerksForBuilding(team, bldId) {
+    const PERK_FOR_BLD = {
+      naval_base:          'f_01',
+      destroyer_factory:   'd_03',
+      cruiser_factory:     'c_08',
+      dreadnaught_factory: 'dr_08',
+    };
+    const perkId = PERK_FOR_BLD[bldId];
+    if (!perkId || !this._has(team, perkId)) return [];
+    const def = PERK_CATALOGUE[perkId];
+    if (!def) return [];
+    return [{ id: perkId, name: def.name, desc: def.desc }];
+  }
+
   getPerksForUnit(team, shipType, composition = null) {
     const unlocked = this._unlockedByTeam.get(team);
     if (!unlocked || unlocked.size === 0) return [];

@@ -775,7 +775,7 @@ export default class GameScene extends Phaser.Scene {
       // Key by nodeId + bldId so multiple factories on same node each tick
       const key = `${nodeId}:${bldId}`;
       if (!this.unitProduction.has(key)) {
-        this.unitProduction.set(key, { elapsed: 0, duration: prod.duration, shipType: prod.shipType, nodeId, arcG: null, drawArc: null });
+        this.unitProduction.set(key, { elapsed: 0, duration: prod.duration, shipType: prod.shipType, nodeId, bldId, arcG: null, drawArc: null });
       }
     }
 
@@ -830,13 +830,20 @@ export default class GameScene extends Phaser.Scene {
 
       prod.elapsed += delta;
 
-      // Refresh arc via stored draw function from NodePanel card
+      // Refresh arc — use effective duration so arc reflects Rapid Scramble speed
       if (prod.arcG && !prod.arcG.destroyed && prod.drawArc) {
-        prod.drawArc(Math.min(prod.elapsed / prod.duration, 1));
+        const effectiveDuration = this.perkManager
+          ? this.perkManager.getRapidScrambleDuration(owner, prod.bldId, prod.duration)
+          : prod.duration;
+        prod.drawArc(Math.min(prod.elapsed / effectiveDuration, 1));
       }
 
-      if (prod.elapsed >= prod.duration) {
-        prod.elapsed -= prod.duration;
+      const effectiveDur = this.perkManager
+        ? this.perkManager.getRapidScrambleDuration(owner, prod.bldId, prod.duration)
+        : prod.duration;
+
+      if (prod.elapsed >= effectiveDur) {
+        prod.elapsed -= effectiveDur;
 
         const shipType = prod.shipType || 'fighter';
         const node     = this.nodeMap.get(nodeId);

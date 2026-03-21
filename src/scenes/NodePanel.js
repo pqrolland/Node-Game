@@ -591,8 +591,21 @@ export default class NodePanel extends Phaser.Scene {
     }).setOrigin(0.5, 0);
 
     // ── Output text ────────────────────────────────────────────────────────
-    const cardOutput = isPlanet ? 'Outpost' : isConst ? 'Constructing…' : isEmpty ? '' : def.output;
-    const outText = this.add.text(CARD_W / 2, 68, cardOutput, {
+    // For production buildings, replace hardcoded time with perk-adjusted rate
+    const PROD_DURATIONS = { naval_base: 15000, destroyer_factory: 30000, cruiser_factory: 30000, dreadnaught_factory: 30000 };
+    const PROD_SHIP_NAMES = { naval_base: 'Fighter', destroyer_factory: 'Destroyer', cruiser_factory: 'Cruiser', dreadnaught_factory: 'Dreadnaught' };
+    let cardOutputStr = isPlanet ? 'Outpost' : isConst ? 'Constructing…' : isEmpty ? '' : def.output;
+    if (!isPlanet && !isConst && !isEmpty && PROD_DURATIONS[realBldId]) {
+      const gs = this.scene.get('GameScene');
+      const nodeTeam = gs?.nodeOwnership?.get(this.activeNode?.id) ?? 'player';
+      const baseDur = PROD_DURATIONS[realBldId];
+      const effectiveDur = gs?.perkManager
+        ? gs.perkManager.getRapidScrambleDuration(nodeTeam, realBldId, baseDur)
+        : baseDur;
+      const effectiveSecs = Math.round(effectiveDur / 1000);
+      cardOutputStr = `+1 ${PROD_SHIP_NAMES[realBldId]} / ${effectiveSecs}s`;
+    }
+    const outText = this.add.text(CARD_W / 2, 68, cardOutputStr, {
       font: '8px monospace',
       color: '#556677',
       wordWrap: { width: CARD_W - 8 },
@@ -600,17 +613,34 @@ export default class NodePanel extends Phaser.Scene {
     }).setOrigin(0.5, 0);
 
     // ── Click zone ────────────────────────────────────────────────────────
+    const PRODUCTION_BLDS = new Set(['naval_base', 'destroyer_factory', 'cruiser_factory', 'dreadnaught_factory']);
     const zone = this.add.rectangle(0, 0, CARD_W, CARD_H, 0xffffff, 0)
       .setOrigin(0, 0).setInteractive({ useHandCursor: true });
-    zone.on('pointerover', () => drawBg(true));
-    zone.on('pointerout',  () => drawBg(false));
+    zone.on('pointerover', () => {
+      drawBg(true);
+      if (PRODUCTION_BLDS.has(realBldId)) {
+        const ptr = this.input.activePointer;
+        const nodeTeam = this.game.scene.getScene('GameScene')?.nodeOwnership?.get(this.activeNode?.id) ?? 'player';
+        this.game.events.emit('showBuildingTooltip', { bldId: realBldId, x: ptr.x, y: ptr.y, team: nodeTeam });
+      }
+    });
+    zone.on('pointermove', () => {
+      if (PRODUCTION_BLDS.has(realBldId)) {
+        const ptr = this.input.activePointer;
+        const nodeTeam = this.game.scene.getScene('GameScene')?.nodeOwnership?.get(this.activeNode?.id) ?? 'player';
+        this.game.events.emit('showBuildingTooltip', { bldId: realBldId, x: ptr.x, y: ptr.y, team: nodeTeam });
+      }
+    });
+    zone.on('pointerout', () => {
+      drawBg(false);
+      if (PRODUCTION_BLDS.has(realBldId)) this.game.events.emit('hideTooltip');
+    });
     zone.on('pointerdown', () => { if (isEmpty) this._openModal(); /* planet & built: no action yet */ });
 
     // Add base card layers first so arc renders on top
     card.add([g, iconG, nameText, outText, zone]);
 
     // Production buildings: show progress arc in top-right corner
-    const PRODUCTION_BLDS = new Set(['naval_base', 'destroyer_factory', 'cruiser_factory', 'dreadnaught_factory']);
     if (PRODUCTION_BLDS.has(realBldId) && !isConst) {
       const gs       = this.scene.get('GameScene');
       const prodKey  = `${this.activeNode?.id}:${realBldId}`;
@@ -685,29 +715,53 @@ export default class NodePanel extends Phaser.Scene {
     this.modal = this.add.container(0, 0).setVisible(false).setDepth(20);
     const { width, height } = this.scale;
 
-    // ── Static: dim + box + title + close ────────────────────────────────
-    const dim = this.add.rectangle(0, 0, width, height, 0x000000, 0.7)
+    // ── Static: dim (click outside to close) + box + title + close ───────
+    const dim = this.add.rectangle(0, 0, width, height, 0x000000, 0.72)
       .setOrigin(0, 0).setInteractive();
     dim.on('pointerdown', () => this._closeModal());
     this.modal.add(dim);
 
     this._modalMW = 640; this._modalMH = 380;
-    this._modalMX = (width - this._modalMW) / 2;
+    this._modalMX = (width  - this._modalMW) / 2;
     this._modalMY = (height - this._modalMH) / 2;
 
     this._modalBox = this.add.graphics();
     this.modal.add(this._modalBox);
+
+    // Invisible blocker so clicks inside the panel don't fall through to dim
+    const blocker = this.add.rectangle(
+      this._modalMX, this._modalMY, this._modalMW, this._modalMH, 0xffffff, 0
+    ).setOrigin(0, 0).setInteractive();
+    blocker.on('pointerdown', (_p, _lx, _ly, e) => e.stopPropagation());
+    this.modal.add(blocker);
 
     this.modal.add(this.add.text(
       this._modalMX + this._modalMW / 2, this._modalMY + 20, 'ADD BUILDING', {
       font: 'bold 13px monospace', color: '#44aaff'
     }).setOrigin(0.5, 0));
 
-    const closeBtn = this._makeButton(
-      this._modalMX + this._modalMW - 30, this._modalMY + 12,
-      '✕', () => this._closeModal(), 0x1a1a2e, '#556677'
-    );
-    this.modal.add(closeBtn);
+    // Close button — drawn X matching ResearchScene style
+    const CX = this._modalMX + this._modalMW - 22;
+    const CY = this._modalMY + 20;
+    const closeG = this.add.graphics();
+    const drawClose = (hover) => {
+      closeG.clear();
+      closeG.fillStyle(hover ? 0x1a3a6a : 0x0d1a2e, 1);
+      closeG.fillRoundedRect(CX - 12, CY - 12, 24, 24, 4);
+      closeG.lineStyle(1, hover ? 0x44aaff : 0x2a4a6a, 0.9);
+      closeG.strokeRoundedRect(CX - 12, CY - 12, 24, 24, 4);
+      closeG.lineStyle(1.5, hover ? 0x88ccff : 0x4477aa, 1);
+      closeG.lineBetween(CX - 5, CY - 5, CX + 5, CY + 5);
+      closeG.lineBetween(CX + 5, CY - 5, CX - 5, CY + 5);
+    };
+    drawClose(false);
+    const closeZone = this.add.rectangle(CX, CY, 28, 28, 0xffffff, 0)
+      .setInteractive({ useHandCursor: true });
+    closeZone.on('pointerover',  () => drawClose(true));
+    closeZone.on('pointerout',   () => drawClose(false));
+    closeZone.on('pointerdown',  (_p, _lx, _ly, e) => { e.stopPropagation(); this._closeModal(); });
+    this.modal.add(closeG);
+    this.modal.add(closeZone);
 
     // Dynamic option cards live in a sub-container rebuilt each open
     this._modalOptions = this.add.container(0, 0);
@@ -734,32 +788,78 @@ export default class NodePanel extends Phaser.Scene {
     );
 
     const options = ['naval_base', 'destroyer_factory', 'cruiser_factory', 'dreadnaught_factory', 'farm', 'metal_extractor', 'fuel_extractor', 'asteroid_mine'];
-    const OPT_W = 130, OPT_H = 168, OPT_GAP = 16;
+    const OPT_W = 130, OPT_H = 148, OPT_GAP = 16;
     const COLS  = 4;
 
-    // Resize box to fit 2 rows
-    const boxH = MH + 48 + OPT_H + OPT_GAP + 10;
+    const ROWS       = Math.ceil(options.length / COLS);
+    const rowTotalW  = COLS * OPT_W + (COLS - 1) * OPT_GAP;
+    const startX     = MX + (MW - rowTotalW) / 2;
+
+    // Fixed viewport height — shows ~2 rows, scrollable for more
+    const VIEWPORT_H = OPT_H * 2 + OPT_GAP + 24;
+    const CONTENT_H  = ROWS * (OPT_H + OPT_GAP);
+    const boxH       = 60 + VIEWPORT_H + 28; // header + viewport + footer
+    const SCROLL_MAX = Math.max(0, CONTENT_H - VIEWPORT_H);
+
+    if (!this._modalScrollY) this._modalScrollY = 0;
+    this._modalScrollY = Math.min(this._modalScrollY, SCROLL_MAX);
+
     this._modalBox.clear();
-    this._modalBox.fillStyle(0x0d1422, 1);
+    this._modalBox.fillStyle(0x070d1a, 1);
     this._modalBox.fillRoundedRect(MX, MY, MW, boxH, 8);
-    this._modalBox.lineStyle(1, 0x2255aa, 1);
+    this._modalBox.lineStyle(1, 0x2255aa, 0.9);
     this._modalBox.strokeRoundedRect(MX, MY, MW, boxH, 8);
 
-    const rowTotalW = COLS * OPT_W + (COLS - 1) * OPT_GAP;
-    const startX    = MX + (MW - rowTotalW) / 2;
+    // Footer: "15s to build all buildings"
+    const footerY = MY + boxH - 20;
+    this._modalOptions.add(this.add.text(MW / 2 + MX, footerY,
+      '⏱  All buildings take 15s to construct', {
+      font: '9px monospace', color: '#334455'
+    }).setOrigin(0.5, 0));
+
+    // Viewport clip mask
+    const VIEWPORT_Y = MY + 55;
+    const maskGfx = this.make.graphics({ add: false });
+    maskGfx.fillRect(MX, VIEWPORT_Y, MW, VIEWPORT_H);
+    const mask = maskGfx.createGeometryMask();
+    this._modalOptions.add(maskGfx);
+
+    // Scrollbar
+    const TRACK_X = MX + MW - 14;
+    const trackG  = this.add.graphics();
+    trackG.fillStyle(0x0d1828, 1);
+    trackG.fillRect(TRACK_X, VIEWPORT_Y, 5, VIEWPORT_H);
+    if (SCROLL_MAX > 0) {
+      const thumbH = Math.max(20, Math.round(VIEWPORT_H * (VIEWPORT_H / CONTENT_H)));
+      const thumbY = VIEWPORT_Y + Math.round((VIEWPORT_H - thumbH) * (this._modalScrollY / SCROLL_MAX));
+      trackG.fillStyle(0x2255aa, 0.8);
+      trackG.fillRoundedRect(TRACK_X, thumbY, 5, thumbH, 2);
+    }
+    this._modalOptions.add(trackG);
+
+    // Scroll wheel zone
+    if (SCROLL_MAX > 0) {
+      const scrollZone = this.add.rectangle(MX, VIEWPORT_Y, MW, VIEWPORT_H, 0xffffff, 0)
+        .setOrigin(0, 0).setInteractive();
+      scrollZone.on('wheel', (_p, _o, _dx, dy) => {
+        this._modalScrollY = Math.max(0, Math.min(SCROLL_MAX, this._modalScrollY - dy * 0.5));
+        this._rebuildModalOptions();
+      });
+      this._modalOptions.add(scrollZone);
+    }
 
     options.forEach((bldId, i) => {
       const def       = BUILDING_DEFS[bldId];
       const col       = i % COLS;
       const row       = Math.floor(i / COLS);
       const ox        = startX + col * (OPT_W + OPT_GAP);
-      const oy        = MY + 55 + row * (OPT_H + OPT_GAP);
+      const oy        = VIEWPORT_Y + row * (OPT_H + OPT_GAP) - this._modalScrollY;
       const alreadyBuilt = existing.includes(bldId);
       const cost      = def.cost || DEFAULT_COST;
       const canAfford = res.food >= cost.food && res.metal >= cost.metal && res.fuel >= cost.fuel;
       const disabled  = alreadyBuilt || !canAfford;
 
-      const og = this.add.graphics();
+      const og = this.add.graphics().setMask(mask);
       const drawOptBg = (hover) => {
         og.clear();
         if (alreadyBuilt) {
@@ -790,24 +890,33 @@ export default class NodePanel extends Phaser.Scene {
       const producesKey = PRODUCES_SHIP[bldId];
       const nameTxt = this.add.text(ox + OPT_W / 2, oy + 52, def.name, {
         font: 'bold 11px monospace',
-        color: alreadyBuilt ? '#334455' : (producesKey ? '#aaccff' : '#aaccff'),
+        color: alreadyBuilt ? '#334455' : '#aaccff',
         wordWrap: { width: OPT_W - 8 }, align: 'center'
-      }).setOrigin(0.5, 0);
-
+      }).setOrigin(0.5, 0).setMask(mask);
       this._modalOptions.add(nameTxt);
 
-      // Output — also hoverable for factory buildings (producesKey already set above)
-      const outputTxt = this.add.text(ox + OPT_W / 2, oy + 70,
-        alreadyBuilt ? '— Already built —' : def.output, {
+      // Output — perk-adjusted production rate if applicable
+      const MODAL_PROD_DUR   = { naval_base: 15000, destroyer_factory: 30000, cruiser_factory: 30000, dreadnaught_factory: 30000 };
+      const MODAL_SHIP_NAMES = { naval_base: 'Fighter', destroyer_factory: 'Destroyer', cruiser_factory: 'Cruiser', dreadnaught_factory: 'Dreadnaught' };
+      let modalOutputStr = alreadyBuilt ? '— Already built —' : def.output;
+      if (!alreadyBuilt && MODAL_PROD_DUR[bldId]) {
+        const gs2       = this.scene.get('GameScene');
+        const nodeTeam2 = gs2?.nodeOwnership?.get(this.activeNode?.id) ?? 'player';
+        const baseDur2  = MODAL_PROD_DUR[bldId];
+        const effDur2   = gs2?.perkManager
+          ? gs2.perkManager.getRapidScrambleDuration(nodeTeam2, bldId, baseDur2)
+          : baseDur2;
+        modalOutputStr = `+1 ${MODAL_SHIP_NAMES[bldId]} / ${Math.round(effDur2 / 1000)}s`;
+      }
+      const outputTxt = this.add.text(ox + OPT_W / 2, oy + 70, modalOutputStr, {
         font: '10px monospace',
         color: alreadyBuilt ? '#334455' : '#7799bb',
         wordWrap: { width: OPT_W - 8 }, align: 'center'
-      }).setOrigin(0.5, 0);
-
+      }).setOrigin(0.5, 0).setMask(mask);
       this._modalOptions.add(outputTxt);
 
       // Divider
-      const divGfx = this.add.graphics();
+      const divGfx = this.add.graphics().setMask(mask);
       divGfx.lineStyle(1, 0x1a2a44, alreadyBuilt ? 0.3 : 0.7);
       divGfx.lineBetween(ox + 10, oy + 90, ox + OPT_W - 10, oy + 90);
       this._modalOptions.add(divGfx);
@@ -854,19 +963,12 @@ export default class NodePanel extends Phaser.Scene {
         this._modalOptions.add(mg);
         this._modalOptions.add(this.add.text(valX, rowY + 1, String(val), {
           font: 'bold 10px monospace', color
-        }));
+        }).setMask(mask));
       });
-
-      // Build time
-      const buildSecs = Math.round((def.buildTime || DEFAULT_BUILD_MS) / 1000);
-      this._modalOptions.add(this.add.text(
-        ox + OPT_W / 2, oy + OPT_H - 18, `⏱  ${buildSecs}s build time`, {
-        font: '10px monospace', color: alreadyBuilt ? '#223344' : '#6688aa'
-      }).setOrigin(0.5, 0));
 
       // Click zone — only active if not disabled
       const zone = this.add.rectangle(ox, oy, OPT_W, OPT_H, 0xffffff, 0)
-        .setOrigin(0, 0).setInteractive({ useHandCursor: !disabled });
+        .setOrigin(0, 0).setInteractive({ useHandCursor: !disabled }).setMask(mask);
       zone.on('pointerover', () => { if (!disabled) drawOptBg(true); });
       zone.on('pointerout',  () => {
         if (!disabled) drawOptBg(false);
@@ -879,10 +981,10 @@ export default class NodePanel extends Phaser.Scene {
       });
       this._modalOptions.add(zone);
 
-      // Tooltip hit zone — layered on TOP of click zone, covering name + output text only
+      // Tooltip hit zone — ship tooltip on name + output
       if (producesKey && !alreadyBuilt) {
         const ttZone = this.add.rectangle(ox, oy + 46, OPT_W, 36, 0xffffff, 0)
-          .setOrigin(0, 0).setInteractive({ useHandCursor: true });
+          .setOrigin(0, 0).setInteractive({ useHandCursor: true }).setMask(mask);
         ttZone.on('pointerover', () => {
           nameTxt.setColor('#ffffff');
           outputTxt.setColor('#ffffff');
@@ -899,7 +1001,6 @@ export default class NodePanel extends Phaser.Scene {
           this.game.events.emit('hideTooltip');
         });
         ttZone.on('pointerdown', () => {
-          // Still trigger the build on click
           if (!disabled) { this._addBuilding(bldId); this._closeModal(); }
         });
         this._modalOptions.add(ttZone);
@@ -908,6 +1009,7 @@ export default class NodePanel extends Phaser.Scene {
   }
 
   _openModal() {
+    this._modalScrollY = 0;
     this._rebuildModalOptions();
     this.modal.setVisible(true);
   }

@@ -144,6 +144,10 @@ export default class TooltipScene extends Phaser.Scene {
       this.scene.bringToTop();
       this._show(key, x, y, team ?? null, composition ?? null);
     });
+    this.game.events.on('showBuildingTooltip', ({ bldId, x, y, team }) => {
+      this.scene.bringToTop();
+      this._showBuilding(bldId, x, y, team ?? 'player');
+    });
     this.game.events.on('hideTooltip', () => this._hide());
   }
 
@@ -335,6 +339,115 @@ export default class TooltipScene extends Phaser.Scene {
     } catch {
       return [];
     }
+  }
+
+  // ── Building tooltip ──────────────────────────────────────────────────────
+  _showBuilding(bldId, wx, wy, team) {
+    // Building definitions live in NodePanel — read them via GameScene or inline
+    const BLD_INFO = {
+      naval_base:          { name: 'Naval Base',          ship: 'fighter',     base: 15 },
+      destroyer_factory:   { name: 'Destroyer Factory',   ship: 'destroyer',   base: 30 },
+      cruiser_factory:     { name: 'Cruiser Factory',     ship: 'cruiser',     base: 30 },
+      dreadnaught_factory: { name: 'Dreadnaught Factory', ship: 'dreadnaught', base: 30 },
+    };
+    const info = BLD_INFO[bldId];
+    if (!info) return;
+
+    const { width, height } = this.scale;
+    const TW  = this._TW;
+    const PAD = 12;
+
+    // Lookup active perks for this building
+    let perks = [];
+    let effectiveSecs = info.base;
+    try {
+      const gs = this.game.scene.getScene('GameScene');
+      if (gs?.perkManager) {
+        perks = gs.perkManager.getPerksForBuilding(team, bldId) || [];
+        const effectiveMs = gs.perkManager.getRapidScrambleDuration(team, bldId, info.base * 1000);
+        effectiveSecs = Math.round(effectiveMs / 1000);
+      }
+    } catch { /* safe */ }
+
+    const hasPerks   = perks.length > 0;
+    const capColor   = hasPerks ? '#88dd66' : '#aaccff';
+    const rateBase   = `+1 ${info.ship} / ${info.base}s`;
+    const rateActive = hasPerks ? `+1 ${info.ship} / ${effectiveSecs}s` : null;
+
+    // Build lines
+    const lines = [
+      { text: info.name,   font: 'bold 13px monospace', color: capColor,  y: PAD },
+      { text: rateBase,    font: '10px monospace',       color: hasPerks ? '#556677' : '#7799bb', y: PAD + 20, strike: hasPerks },
+    ];
+    if (rateActive) lines.push({ text: rateActive, font: 'bold 10px monospace', color: '#88dd66', y: PAD + 34 });
+
+    const contentH = rateActive ? PAD + 52 : PAD + 36;
+    const perkBlockY = contentH;
+    const PERK_ROW_H = 36;
+    const totalH = perkBlockY + (hasPerks ? 8 + perks.length * PERK_ROW_H + PAD : PAD);
+
+    // Position
+    let tx = wx + 12, ty = wy + 12;
+    if (ty + totalH > height - 8) ty = wy - totalH - 8;
+    if (tx + TW     > width  - 8) tx = wx - TW - 8;
+    tx = Math.max(4, tx); ty = Math.max(4, ty);
+
+    // Draw into perk container (reuse it for building tooltip too)
+    this._perkTexts.forEach(o => o.destroy());
+    this._perkTexts = [];
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x060b14, 0.96);
+    bg.fillRoundedRect(0, 0, TW, totalH, 6);
+    bg.lineStyle(1, hasPerks ? 0x336622 : 0x1a2a44, 0.8);
+    bg.strokeRoundedRect(0, 0, TW, totalH, 6);
+    bg.fillStyle(hasPerks ? 0x336622 : 0x1a3a5c, 1);
+    bg.fillRect(0, 0, 3, totalH);
+    this._perkContainer.add(bg);
+    this._perkTexts.push(bg);
+
+    for (const l of lines) {
+      const t = this.add.text(PAD, l.y, l.text, { font: l.font, color: l.color });
+      if (l.strike) {
+        // Draw strikethrough manually via graphics
+        const sg = this.add.graphics();
+        sg.lineStyle(1, 0x445566, 0.9);
+        const mid = l.y + t.height / 2;
+        sg.lineBetween(PAD, mid, PAD + t.width, mid);
+        this._perkContainer.add(sg);
+        this._perkTexts.push(sg);
+      }
+      this._perkContainer.add(t);
+      this._perkTexts.push(t);
+    }
+
+    if (hasPerks) {
+      const divG = this.add.graphics();
+      divG.lineStyle(1, 0x1a3310, 0.8);
+      divG.lineBetween(PAD, perkBlockY + 4, TW - PAD, perkBlockY + 4);
+      this._perkContainer.add(divG);
+      this._perkTexts.push(divG);
+
+      perks.forEach((perk, i) => {
+        const ry = perkBlockY + 8 + i * PERK_ROW_H;
+        const iconFn = PERK_ICONS[perk.name];
+        if (iconFn) {
+          const ig = this.add.graphics();
+          iconFn(ig, PAD + 8, ry + 8, 0x66cc44);
+          this._perkContainer.add(ig);
+          this._perkTexts.push(ig);
+        }
+        const tx2 = PAD + 24;
+        const nt = this.add.text(tx2, ry, perk.name, { font: 'bold 10px monospace', color: '#88dd66' });
+        const dt = this.add.text(tx2, ry + 13, perk.desc, { font: '9px monospace', color: '#557744', wordWrap: { width: TW - tx2 - PAD } });
+        this._perkContainer.add(nt); this._perkContainer.add(dt);
+        this._perkTexts.push(nt, dt);
+      });
+    }
+
+    // Hide unit tooltip, show perk container as the building tooltip
+    this._container.setVisible(false);
+    this._perkContainer.setPosition(tx, ty).setVisible(true);
   }
 
   _hide() {
