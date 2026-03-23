@@ -209,10 +209,25 @@ export const PERK_ICONS = {
     g.lineStyle(1.5, col, 0.6); g.strokeCircle(cx, cy, 6);
     g.lineStyle(1, col, 0.3);  g.strokeCircle(cx, cy, 9);
   },
+  'Deflection Field':    (g, cx, cy, col) => {
+    g.lineStyle(2, col, 1);    g.strokeCircle(cx, cy, 3);
+    g.lineStyle(1.5, col, 0.6); g.strokeCircle(cx, cy, 6);
+    g.lineStyle(1, col, 0.3);  g.strokeCircle(cx, cy, 9);
+  },
   // Shielded Core — concentric hexagon
   'Shielded Core':       (g, cx, cy, col) => {
     const hex = (r, a=0.15) => { g.lineStyle(1.5, col, a); const pts=[]; for(let i=0;i<6;i++){const an=i*Math.PI/3-Math.PI/6; pts.push({x:cx+Math.cos(an)*r,y:cy+Math.sin(an)*r});} g.strokePoints(pts, true); };
     hex(9, 0.8); hex(5, 0.5);
+    g.fillStyle(col, 1); g.fillCircle(cx, cy, 2);
+  },
+  // Flak Defense — burst pattern (small radiating lines)
+  'Flak Defense':        (g, cx, cy, col) => {
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const r1 = 3, r2 = 8 + (i % 2) * 3;
+      g.lineStyle(1.5, col, i % 2 === 0 ? 1 : 0.5);
+      g.lineBetween(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1, cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+    }
     g.fillStyle(col, 1); g.fillCircle(cx, cy, 2);
   },
 
@@ -543,7 +558,7 @@ const TREE_DEFS = [
     pool: [
       { id: 'f_01', name: 'Rapid Scramble',     icon: PERK_ICONS['Rapid Scramble'],     desc: 'Fighters launch 30% faster from Naval Bases.', tested: true },
       { id: 'f_02', name: 'Dense Formation',    icon: PERK_ICONS['Dense Formation'],    desc: 'Each Fighter gains +1 attack damage.', tested: true },
-      { id: 'f_03', name: 'Afterburner',        icon: PERK_ICONS['Afterburner'],        desc: 'Each Fighter increases stack movement speed by 2.5%.' },
+      { id: 'f_03', name: 'Afterburner',        icon: PERK_ICONS['Afterburner'],        desc: 'Each Fighter increases stack movement speed by 2.5%.', tested: true },
       { id: 'f_04', name: 'Wingman Protocol',   icon: PERK_ICONS['Wingman Protocol'],   desc: 'Each Fighter has a 10% chance to dodge one hit per Main Strike phase.', tested: true },
       { id: 'f_05', name: 'Ace Pilots',         icon: PERK_ICONS['Ace Pilots'],         desc: 'Each Fighter deals double damage against Destroyers.', tested: true },
       { id: 'f_06', name: 'Swarm Tactics',      icon: PERK_ICONS['Swarm Tactics'],      desc: 'Each Fighter gains +1 attack when in a stack of only Fighters.', tested: true },
@@ -569,7 +584,7 @@ const TREE_DEFS = [
       { id: 'd_07', name: 'Ace Pilots',        icon: PERK_ICONS['Ace Pilots'],        desc: 'Each Destroyer deals double damage against other Destroyers.', tested: true },
       { id: 'd_08', name: 'Dense Formation',   icon: PERK_ICONS['Dense Formation'],   desc: 'Each Destroyer gains +1 attack damage.', tested: true },
       { id: 'd_09', name: 'Wingman Protocol',  icon: PERK_ICONS['Wingman Protocol'],  desc: 'Each Destroyer has a 10% chance to dodge one hit per Main Strike phase.', tested: true },
-      { id: 'd_10', name: 'Hit and Run',       icon: PERK_ICONS['Hit and Run'],       desc: 'Destroyers may retreat after Pre-Strike without entering Main Strike.' },
+      { id: 'd_10', name: 'Afterburner',       icon: PERK_ICONS['Afterburner'],       desc: 'Each Destroyer increases stack movement speed by 5%.', tested: true },
     ],
   },
   {
@@ -583,11 +598,11 @@ const TREE_DEFS = [
       { id: 'c_02', name: 'Reinforced Hull',    icon: PERK_ICONS['Reinforced Hull'],    desc: 'Each Cruiser gains +10 HP.', tested: true },
       { id: 'c_03', name: 'Nanite Repair',      icon: PERK_ICONS['Nanite Repair'],      desc: 'After each combat phase, damaged (not destroyed) Cruisers have a 30% chance to be restored to full HP.', tested: true },
       { id: 'c_04', name: 'Escort Formation',   icon: PERK_ICONS['Escort Formation'],   desc: 'Each Cruiser absorbs one hit directed at the Flagship per Main Strike round.' },
-      { id: 'c_05', name: 'Regeneration Field', icon: PERK_ICONS['Regeneration Field'], desc: 'Each friendly ship in a stack with a Cruiser gains +5 HP.' },
+      { id: 'c_05', name: 'Deflection Field', icon: PERK_ICONS['Deflection Field'], desc: 'Each friendly ship in a stack with a Cruiser gains +5 HP.', tested: true },
       { id: 'c_06', name: 'Hunter Protocol',    icon: PERK_ICONS['Hunter Protocol'],    desc: 'Each Cruiser deals +5 damage against Dreadnaughts and Flagships.', tested: true },
       { id: 'c_07', name: 'Ace Pilots',         icon: PERK_ICONS['Ace Pilots'],         desc: 'Each Cruiser deals double damage against Destroyers.', tested: true },
       { id: 'c_08', name: 'Rapid Scramble',     icon: PERK_ICONS['Rapid Scramble'],     desc: 'Cruisers launch 30% faster from Cruiser Factories.', tested: true },
-      { id: 'c_09', name: 'Shielded Core',      icon: PERK_ICONS['Shielded Core'],      desc: 'Each Cruiser takes −10 damage from Pre-Strike attacks.' },
+      { id: 'c_09', name: 'Flak Defense',      icon: PERK_ICONS['Flak Defense'],      desc: 'Each Cruiser negates 1 random incoming Pre-Strike hit.' },
       { id: 'c_10', name: 'Last Stand',         icon: PERK_ICONS['Last Stand'],         desc: 'Each Cruiser deals +2 damage when their stack is outnumbered.', tested: true },
     ],
   },
@@ -601,7 +616,7 @@ const TREE_DEFS = [
       { id: 'dr_01', name: 'Siege Cannons',   icon: PERK_ICONS['Siege Cannons'],   desc: 'Each Dreadnaught\'s attack increases by +5 damage.', tested: true },
       { id: 'dr_02', name: 'Reinforced Hull', icon: PERK_ICONS['Reinforced Hull'], desc: 'Each Dreadnaught gains +15 HP.', tested: true },
       { id: 'dr_03', name: 'Orbital Strike',  icon: PERK_ICONS['Orbital Strike'],  desc: 'Dreadnaught stacks deal 5 Pre-Strike damage to all enemies.', tested: true },
-      { id: 'dr_04', name: 'Afterburner',     icon: PERK_ICONS['Afterburner'],     desc: 'Each Dreadnaught increases stack movement speed by 10%.' },
+      { id: 'dr_04', name: 'Afterburner',     icon: PERK_ICONS['Afterburner'],     desc: 'Each Dreadnaught increases stack movement speed by 10%.', tested: true },
       { id: 'dr_05', name: 'Mass Driver',     icon: PERK_ICONS['Mass Driver'],     desc: 'When a Dreadnaught is alone in a stack, its attacks count as 30 damage × 3.', tested: true },
       { id: 'dr_06', name: 'Wingman Protocol',icon: PERK_ICONS['Wingman Protocol'],desc: 'Each Dreadnaught has a 10% chance to dodge one hit per Main Strike phase.', tested: true },
       { id: 'dr_07', name: 'Last Stand',      icon: PERK_ICONS['Last Stand'],      desc: 'Each Dreadnaught deals +5 damage when their stack is outnumbered.', tested: true },
@@ -619,14 +634,14 @@ const TREE_DEFS = [
     pool: [
       { id: 'fl_01', name: 'Command Aura',      icon: PERK_ICONS['Command Aura'],      desc: 'All ships in the Flagship\'s stack gain +1 attack.', tested: true },
       { id: 'fl_02', name: 'Emergency Shield',  icon: PERK_ICONS['Emergency Shield'],  desc: 'Flagship survives one lethal hit per battle.', tested: true },
-      { id: 'fl_03', name: 'Rally Beacon',      icon: PERK_ICONS['Rally Beacon'],      desc: 'Stacks containing a Flagship have movement speed increased by 50%.' },
+      { id: 'fl_03', name: 'Afterburner',      icon: PERK_ICONS['Afterburner'],      desc: 'Stacks containing a Flagship have movement speed increased by 50%.', tested: true },
       { id: 'fl_04', name: 'Reinforced Hull',   icon: PERK_ICONS['Reinforced Hull'],   desc: 'Each Flagship gains +50 HP.', tested: true },
       { id: 'fl_05', name: 'Last Stand',        icon: PERK_ICONS['Last Stand'],        desc: 'Each Flagship deals +10 damage and attacks 1 additional time when their stack is outnumbered.', tested: true },
       { id: 'fl_06', name: 'First Strike',      icon: PERK_ICONS['First Strike'],      desc: 'Each Flagship gains a Pre-Strike of 20 damage.', tested: true },
       { id: 'fl_07', name: 'Iron Reserve',      icon: PERK_ICONS['Iron Reserve'],      desc: 'Each Flagship generates +5 Food, Metal, and Fuel per resource tick.', tested: true },
       { id: 'fl_08', name: 'Hunter Protocol',   icon: PERK_ICONS['Hunter Protocol'],   desc: 'Each Flagship deals +15 damage against Dreadnaughts and Flagships.', tested: true },
       { id: 'fl_09', name: 'Naval Construction',icon: PERK_ICONS['Naval Construction'],desc: 'Each Flagship produces 1 Fighter every 30 seconds.', tested: true },
-      { id: 'fl_10', name: 'Spearhead',         icon: PERK_ICONS['Spearhead'],         desc: 'Each Flagship gains a Pre-Strike of 10 damage directed at an enemy Flagship, or a random ship if no enemy Flagship is present.' },
+      { id: 'fl_10', name: 'Spearhead',         icon: PERK_ICONS['Spearhead'],         desc: 'Each Flagship fires a 10-damage Pre-Strike that prioritizes the enemy Flagship. Blockable by Flak Defense; redirectable by Escort Formation.' },
     ],
   },
   {

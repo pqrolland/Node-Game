@@ -381,8 +381,8 @@ export default class CombatScene extends Phaser.Scene {
     const { attacker, defender } = this._battle;
     const COL_W = (HP_W - 24) / 2;
 
-    this._drawSide(attacker, px + 12,           py + 36, COL_W, true,  add);
-    this._drawSide(defender, px + 12 + COL_W,   py + 36, COL_W, false, add);
+    this._drawSide(attacker, px + 12,           py + 36, COL_W, true,  add, this._battle.atkRegenBonus ?? 0, 0);
+    this._drawSide(defender, px + 12 + COL_W,   py + 36, COL_W, false, add, this._battle.defRegenBonus ?? 0, this._battle.defLivingBonus ?? 0);
 
     const vDiv = add(this.add.graphics().setDepth(PANEL_DEPTH));
     vDiv.lineStyle(1, 0x1a3a5c, 0.6);
@@ -530,7 +530,7 @@ export default class CombatScene extends Phaser.Scene {
   }
 
   // ── HP side panel ─────────────────────────────────────────────────────────
-  _drawSide(unit, sx, sy, colW, isAttacker, add) {
+  _drawSide(unit, sx, sy, colW, isAttacker, add, regenBonus = 0, livingBonus = 0) {
     const R     = (x) => Math.round(x);
     const label = isAttacker ? 'ATTACKER' : 'DEFENDER';
     const col   = unit.teamColorHex;
@@ -559,7 +559,11 @@ export default class CombatScene extends Phaser.Scene {
       const count    = hps.length;
       const totalCur = hps.reduce((s, h) => s + h, 0);
       const totalMax = count * maxHP;
-      const pct      = totalMax > 0 ? totalCur / totalMax : 0;
+      // Regen Field adds +regenBonus per ship — Living Fortress adds +livingBonus to dreadnaughts
+      const perShipBonus = type === 'dreadnaught' ? livingBonus : regenBonus;
+      const regenTotal = perShipBonus > 0 ? count * perShipBonus : 0;
+      const displayMax = totalMax + regenTotal;
+      const pct = displayMax > 0 ? totalCur / displayMax : 0;
       const shipCol  = SHIP_COLORS[type]    || 0xffffff;
       const shipHex  = SHIP_COLORS_HEX[type] || '#ffffff';
 
@@ -584,8 +588,9 @@ export default class CombatScene extends Phaser.Scene {
       barG.lineStyle(0.5, shipCol, 0.3);
       barG.strokeRect(R(barX), R(rowY + 12), R(BAR_W), BAR_H);
 
-      add(this.add.text(R(barX + BAR_W), R(rowY + 12), `${totalCur}/${totalMax}`, {
-        font: '8px monospace', color: '#334455',
+      const bonusText = regenTotal > 0 ? ` +${regenTotal}` : '';
+      add(this.add.text(R(barX + BAR_W), R(rowY + 12), `${totalCur}/${totalMax}${bonusText}`, {
+        font: '8px monospace', color: regenTotal > 0 ? '#44ddaa' : '#334455',
       }).setOrigin(1, 1).setDepth(depth).setResolution(2));
 
       const hoverZone = add(

@@ -191,6 +191,34 @@ export default class CombatManager {
     syncUnitHP(attacker, this._perks);
     syncUnitHP(defender, this._perks);
 
+    // Perk hook: Deflection Field — +5 HP to all ships in cruiser stacks, round 1 only
+    // Applies to current HP only (not maxHP) so _fullHeal at battle end strips the bonus naturally
+    if (rnd === 1) {
+      const atkRegen = this._perks?.applyRegenField(attacker);
+      const defRegen = this._perks?.applyRegenField(defender);
+      // Store bonus per-type on battle so CombatScene can show accurate +N even after damage
+      if (atkRegen?.applied) {
+        battle.atkRegenBonus = atkRegen.bonusPerShip;
+        battle.log.push({ round: rnd, phase: 'prestrike',
+          text: `✨ Atk [Deflection Field]: ${atkRegen.totalShips} ships +${atkRegen.bonusPerShip} HP each (+${atkRegen.totalBonus} total)`,
+          color: '#44ddaa' });
+      }
+      if (defRegen?.applied) {
+        battle.defRegenBonus = defRegen.bonusPerShip;
+        battle.log.push({ round: rnd, phase: 'prestrike',
+          text: `✨ Def [Deflection Field]: ${defRegen.totalShips} ships +${defRegen.bonusPerShip} HP each (+${defRegen.totalBonus} total)`,
+          color: '#44ddaa' });
+      }
+      // Living Fortress — dreadnaughts on the defending team gain +20 HP
+      const defLiving = this._perks?.applyLivingFortress(defender);
+      if (defLiving?.applied) {
+        battle.defLivingBonus = defLiving.bonus;
+        battle.log.push({ round: rnd, phase: 'prestrike',
+          text: `🏰 Def [Living Fortress]: ${defLiving.count} dreadnaught(s) +${defLiving.bonus} HP`,
+          color: '#ff8844' });
+      }
+    }
+
     // ── Phase 1 + 2: Pre-Strike & Resolution ─────────────────────────────
     // Count destroyers BEFORE any damage so both sides stage simultaneously.
     const atkBaseShots = (attacker.unitHP.destroyer?.filter(h => h > 0).length ?? 0) * BARRAGE_SHOTS_PER_DESTROYER;
@@ -211,6 +239,12 @@ export default class CombatManager {
     const atkFSBuf = _stageFirstStrike(atkFirstStrike, defender.unitHP);
     const defFSBuf = _stageFirstStrike(defFirstStrike, attacker.unitHP);
 
+    // Perk hook: Spearhead — flagship pre-strike targeting enemy flagship first
+    const atkSpearhead = this._perks?.getSpearheadHits(attacker) ?? [];
+    const defSpearhead = this._perks?.getSpearheadHits(defender) ?? [];
+    const atkSpearBuf  = _stageSpearhead(atkSpearhead, defender.unitHP);
+    const defSpearBuf  = _stageSpearhead(defSpearhead, attacker.unitHP);
+
     // Perk hook: Orbital Strike — flat damage to every enemy ship
     const atkOrbitalDmg = this._perks?.getOrbitalStrikeDamage(attacker) ?? 0;
     const defOrbitalDmg = this._perks?.getOrbitalStrikeDamage(defender) ?? 0;
@@ -218,12 +252,41 @@ export default class CombatManager {
     const defOrbitalBuf = defOrbitalDmg > 0 ? _stageOrbitalStrike(defOrbitalDmg, attacker.unitHP) : [];
 
     // Apply all pre-strike buffers
-    _applyBuffer(atkBarrageBuf, defender.unitHP);
-    _applyBuffer(defBarrageBuf, attacker.unitHP);
-    _applyBuffer(atkFSBuf, defender.unitHP);
-    _applyBuffer(defFSBuf, attacker.unitHP);
+    // Perk hook: Flak Defense — each cruiser negates 1 random incoming pre-strike hit
+    // Applied per-buffer so each source independently rolls against Flak
+    const atkBarrageFlak  = this._perks?.applyFlakDefense(defender, atkBarrageBuf) ?? { buf: atkBarrageBuf, negated: 0 };
+    const defBarrageFlak  = this._perks?.applyFlakDefense(attacker, defBarrageBuf) ?? { buf: defBarrageBuf, negated: 0 };
+    const atkFSFlak       = this._perks?.applyFlakDefense(defender, atkFSBuf)      ?? { buf: atkFSBuf,      negated: 0 };
+    const defFSFlak       = this._perks?.applyFlakDefense(attacker, defFSBuf)      ?? { buf: defFSBuf,      negated: 0 };
+
+    // Spearhead: apply Flak Defense first, then Escort Formation (redirects flagship hits to cruisers)
+    const atkSpearFlak    = this._perks?.applyFlakDefense(defender, atkSpearBuf)   ?? { buf: atkSpearBuf,   negated: 0 };
+    const defSpearFlak    = this._perks?.applyFlakDefense(attacker, defSpearBuf)   ?? { buf: defSpearBuf,   negated: 0 };
+    const atkSpearEscort  = this._perks?.applyEscortFormation(defender, atkSpearFlak.buf) ?? { buf: atkSpearFlak.buf, redirected: 0 };
+    const defSpearEscort  = this._perks?.applyEscortFormation(attacker, defSpearFlak.buf) ?? { buf: defSpearFlak.buf, redirected: 0 };
+
+    const atkBarrageBufFiltered = atkBarrageFlak.buf;
+    const defBarrageBufFiltered = defBarrageFlak.buf;
+    const atkFSBufFiltered      = atkFSFlak.buf;
+    const defFSBufFiltered      = defFSFlak.buf;
+    const atkSpearBufFiltered   = atkSpearEscort.buf;
+    const defSpearBufFiltered   = defSpearEscort.buf;
+
+    _applyBuffer(atkBarrageBufFiltered, defender.unitHP);
+    _applyBuffer(defBarrageBufFiltered, attacker.unitHP);
+    _applyBuffer(atkFSBufFiltered, defender.unitHP);
+    _applyBuffer(defFSBufFiltered, attacker.unitHP);
     _applyBuffer(atkOrbitalBuf, defender.unitHP);
     _applyBuffer(defOrbitalBuf, attacker.unitHP);
+    _applyBuffer(atkSpearBufFiltered, defender.unitHP);
+    _applyBuffer(defSpearBufFiltered, attacker.unitHP);
+
+    // Track total flak negations across all buffers for logging
+    const defFlakNegated = atkBarrageFlak.negated + atkFSFlak.negated + atkSpearFlak.negated;
+    const atkFlakNegated = defBarrageFlak.negated + defFSFlak.negated + defSpearFlak.negated;
+    // Spearhead escort redirects
+    const atkSpearRedirected = atkSpearEscort.redirected;
+    const defSpearRedirected = defSpearEscort.redirected;
 
     // Perk hook: Interceptor Role — fighters killed by pre-strike retaliate before pruning
     // Count fighter deaths caused by the pre-strike buffers
@@ -246,10 +309,15 @@ export default class CombatManager {
     for (const hit of defBarrageBuf) battle.log.push({ round: rnd, phase: 'verbose',
       text: `  Def destroyer [${defTorpedo ? 'Torpedo' : 'Barrage'}] → Atk ${hit.type} #${hit.idx + 1}: ${hit.damage} dmg`,
       color: '#553366' });
-    for (const [buf, side, label] of [[atkFSBuf, 'Atk', 'First Strike'], [defFSBuf, 'Def', 'First Strike'],
-                                       [atkOrbitalBuf, 'Atk', 'Orbital Strike'], [defOrbitalBuf, 'Def', 'Orbital Strike']]) {
+    for (const [buf, side] of [[atkFSBufFiltered, 'Atk'], [defFSBufFiltered, 'Def'],
+                                       [atkOrbitalBuf, 'Atk'], [defOrbitalBuf, 'Def']]) {
       for (const hit of buf) battle.log.push({ round: rnd, phase: 'verbose',
-        text: `  ${side} [${label}] → ${side === 'Atk' ? 'Def' : 'Atk'} ${hit.type} #${hit.idx + 1}: ${hit.damage} dmg`,
+        text: `  ${side} [${buf === atkOrbitalBuf || buf === defOrbitalBuf ? 'Orbital Strike' : 'First Strike'}] → ${side === 'Atk' ? 'Def' : 'Atk'} ${hit.type} #${hit.idx + 1}: ${hit.damage} dmg`,
+        color: '#553366' });
+    }
+    for (const [buf, side] of [[atkSpearBufFiltered, 'Atk'], [defSpearBufFiltered, 'Def']]) {
+      for (const hit of buf) battle.log.push({ round: rnd, phase: 'verbose',
+        text: `  ${side} flagship [Spearhead] → ${side === 'Atk' ? 'Def' : 'Atk'} ${hit.type} #${hit.idx + 1}: ${hit.damage} dmg`,
         color: '#553366' });
     }
     for (const [buf, side] of [[atkInterceptBuf, 'Atk'], [defInterceptBuf, 'Def']]) {
@@ -311,10 +379,36 @@ export default class CombatManager {
           color: intercept.triggered > 0 ? '#ff8844' : '#664433' });
       }
     }
+    if (atkSpearBufFiltered.length > 0) {
+      const flagCount = attacker.unitHP?.flagship?.filter(h => h > 0).length ?? 0;
+      const totalDmg  = atkSpearBufFiltered.reduce((s, h) => s + h.damage, 0);
+      battle.log.push({ round: rnd, phase: 'prestrike',
+        text: `Atk [Spearhead]: ${flagCount} flagship(s) → ${totalDmg} dmg to ${atkSpearBufFiltered[0]?.type ?? 'target'}`,
+        color: '#aa66ff' });
+    }
+    if (defSpearBufFiltered.length > 0) {
+      const flagCount = defender.unitHP?.flagship?.filter(h => h > 0).length ?? 0;
+      const totalDmg  = defSpearBufFiltered.reduce((s, h) => s + h.damage, 0);
+      battle.log.push({ round: rnd, phase: 'prestrike',
+        text: `Def [Spearhead]: ${flagCount} flagship(s) → ${totalDmg} dmg to ${defSpearBufFiltered[0]?.type ?? 'target'}`,
+        color: '#aa66ff' });
+    }
+    if (atkSpearRedirected > 0) battle.log.push({ round: rnd, phase: 'prestrike',
+      text: `🛡 Def [Escort Formation]: ${atkSpearRedirected} Spearhead hit(s) redirected to Cruiser(s)`,
+      color: '#44ddaa' });
+    if (defSpearRedirected > 0) battle.log.push({ round: rnd, phase: 'prestrike',
+      text: `🛡 Atk [Escort Formation]: ${defSpearRedirected} Spearhead hit(s) redirected to Cruiser(s)`,
+      color: '#44ddaa' });
+    if (defFlakNegated > 0) battle.log.push({ round: rnd, phase: 'prestrike',
+      text: `💨 Def [Flak Defense]: ${defFlakNegated} incoming pre-strike hit(s) negated`,
+      color: '#44ddaa' });
+    if (atkFlakNegated > 0) battle.log.push({ round: rnd, phase: 'prestrike',
+      text: `💨 Atk [Flak Defense]: ${atkFlakNegated} incoming pre-strike hit(s) negated`,
+      color: '#44ddaa' });
 
     // Early exit if pre-strike ended the battle
     if (!_anyAlive(attacker) || !_anyAlive(defender)) {
-      this._emitRoundUpdate(battle, ui, 0, 0, 0, 0, null, null, null, null, null, null, null, null, null, null, false, false);
+      this._emitRoundUpdate(battle, ui, 0, 0, 0, 0, null, null, null, null, null, null, null, null, null, null, false, false, 0, 0);
       return;
     }
 
@@ -355,12 +449,23 @@ export default class CombatManager {
     const atkFightersBefore = attacker.unitHP?.fighter?.filter(h => h > 0).length ?? 0;
     const defFightersBefore = defender.unitHP?.fighter?.filter(h => h > 0).length ?? 0;
 
-    _applyBuffer(defDodge.hits, defender.unitHP);
-    _applyBuffer(atkDodge.hits, attacker.unitHP);
+    // Perk hook: Escort Formation — each side redirects hits aimed at their own flagship to cruisers
+    // atkDodge.hits = defender's attacks that landed → target attacker → attacker's Escort redirects
+    // defDodge.hits = attacker's attacks that landed → target defender → defender's Escort redirects
+    const atkEscort = this._perks?.applyEscortFormation(attacker, atkDodge.hits) ?? { buf: atkDodge.hits, redirected: 0 };
+    const defEscort = this._perks?.applyEscortFormation(defender, defDodge.hits) ?? { buf: defDodge.hits, redirected: 0 };
+
+    _applyBuffer(atkEscort.buf, attacker.unitHP);  // defender's hits land on attacker
+    _applyBuffer(defEscort.buf, defender.unitHP);  // attacker's hits land on defender
 
     // Perk hook: Emergency Shield — flagship survives first lethal hit per battle
     const atkShield = this._perks?.applyEmergencyShield(attacker, battle) ?? false;
     const defShield = this._perks?.applyEmergencyShield(defender, battle) ?? false;
+
+    // Perk hook: Escort Formation — cruisers absorb hits aimed at flagship
+    // Applied after dodge so we know which hits actually land
+    const atkEscortRedirected = atkEscort.redirected;
+    const defEscortRedirected = defEscort.redirected;
 
     // Perk hook: Kamikaze Protocol — count fighter deaths this phase, stage retaliatory hits
     const atkFightersAfter  = attacker.unitHP?.fighter?.filter(h => h > 0).length ?? 0;
@@ -421,11 +526,12 @@ export default class CombatManager {
       atkRepairChance, defRepairChance,
       atkKamikaze, defKamikaze,
       atkNanite, defNanite,
-      atkShield, defShield);
+      atkShield, defShield,
+      atkEscortRedirected, defEscortRedirected);
   }
 
   // ── Emit round update: write log entries then notify CombatScene ──────────
-  _emitRoundUpdate(battle, ui, atkQLen, defQLen, atkLost, defLost, atkRepair, defRepair, atkDodge, defDodge, atkRepairChance, defRepairChance, atkKamikaze, defKamikaze, atkNanite, defNanite, atkShield, defShield) {
+  _emitRoundUpdate(battle, ui, atkQLen, defQLen, atkLost, defLost, atkRepair, defRepair, atkDodge, defDodge, atkRepairChance, defRepairChance, atkKamikaze, defKamikaze, atkNanite, defNanite, atkShield, defShield, atkEscortR = 0, defEscortR = 0) {
     const { attacker, defender } = battle;
     const rnd = battle.roundNumber;
     const aS  = attacker.stackSize;
@@ -484,6 +590,12 @@ export default class CombatManager {
       text: `🛡 Atk [Emergency Shield]: Flagship survived lethal hit!`, color: '#ffdd44' });
     if (defShield) battle.log.push({ round: rnd, phase: 'resolution',
       text: `🛡 Def [Emergency Shield]: Flagship survived lethal hit!`, color: '#ffdd44' });
+
+    // Escort Formation — log when cruisers absorbed hits for flagship
+    if (atkEscortR > 0) battle.log.push({ round: rnd, phase: 'resolution',
+      text: `🛡 Atk [Escort Formation]: ${atkEscortR} hit(s) redirected from Flagship to Cruiser(s)`, color: '#44ddaa' });
+    if (defEscortR > 0) battle.log.push({ round: rnd, phase: 'resolution',
+      text: `🛡 Def [Escort Formation]: ${defEscortR} hit(s) redirected from Flagship to Cruiser(s)`, color: '#44ddaa' });
 
     // Notify CombatScene
     this._scene.game.events.emit('combatUpdate', { battle });
@@ -676,7 +788,33 @@ function _stageFirstStrike(hits, targetHP) {
   return buf;
 }
 
-// Build a damage buffer for Orbital Strike — deals fixed damage to EVERY living enemy ship.
+// Stage Spearhead hits — targets enemy flagship first, falls back to random ship
+function _stageSpearhead(hits, targetHP) {
+  const buf = [];
+  for (const hit of hits) {
+    // Prefer flagship targets
+    const flagships = (targetHP.flagship || [])
+      .map((hp, idx) => ({ type: 'flagship', idx, hp }))
+      .filter(e => e.hp > 0);
+    if (flagships.length > 0) {
+      const t = flagships[Math.floor(Math.random() * flagships.length)];
+      buf.push({ type: t.type, idx: t.idx, damage: hit.damage });
+    } else {
+      // Fall back to any living ship
+      const viable = [];
+      for (const type of SHIP_ORDER) {
+        const hps = targetHP[type] || [];
+        for (let i = 0; i < hps.length; i++) {
+          if (hps[i] > 0) viable.push({ type, idx: i });
+        }
+      }
+      if (!viable.length) break;
+      const t = viable[Math.floor(Math.random() * viable.length)];
+      buf.push({ type: t.type, idx: t.idx, damage: hit.damage });
+    }
+  }
+  return buf;
+}
 // Returns [{ type, idx, damage }]
 function _stageOrbitalStrike(damagePerShip, targetHP) {
   const buf = [];

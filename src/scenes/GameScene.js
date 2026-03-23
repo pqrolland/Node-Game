@@ -248,6 +248,7 @@ export default class GameScene extends Phaser.Scene {
       buildings: ['__planet__', ...buildings],
     });
 
+    // ── Existing nodes ────────────────────────────────────────────────────
     // Player at left-centre
     const playerNode = makeNode('test_player', 'Test Base', 220, 360, ['asteroid_mine']);
 
@@ -257,28 +258,59 @@ export default class GameScene extends Phaser.Scene {
     // Original enemy: below-centre
     const enemyNode = makeNode('test_enemy', 'Fighter Outpost', 540, 560, ['asteroid_mine']);
 
-    // 5 new enemy planets arranged in a vertical column on the right side
-    const EX = 860; // shared X for the column
+    // 5 enemy planets in a vertical column on the right side
+    const EX = 860;
     const enemyNode2 = makeNode('test_enemy_2', 'Naval Base',          EX, 160, ['naval_base',          'asteroid_mine']);
     const enemyNode3 = makeNode('test_enemy_3', 'Destroyer Factory',   EX, 295, ['destroyer_factory',   'asteroid_mine']);
     const enemyNode4 = makeNode('test_enemy_4', 'Cruiser Factory',     EX, 430, ['cruiser_factory',     'asteroid_mine']);
     const enemyNode5 = makeNode('test_enemy_5', 'Dreadnaught Factory', EX, 565, ['dreadnaught_factory', 'asteroid_mine']);
     const enemyNode6 = makeNode('test_enemy_6', 'Flagship Command',   1100, 360, ['asteroid_mine']);
 
-    this._nodes = [playerNode, neutralNode, enemyNode,
-                   enemyNode2, enemyNode3, enemyNode4, enemyNode5, enemyNode6];
+    // ── New nodes: upside-down T ──────────────────────────────────────────
+    // Horizontal bar: player(bottom-right) ← h3 ← h2 ← h1(corner)
+    // Vertical stem:  h1(corner) → v1 → v2 → purple(top)
+    const H_STEP = 160;  // horizontal spacing
+    const V_STEP = 130;  // vertical spacing
+    const BASE_X = playerNode.x;     // 220
+    const BASE_Y = playerNode.y;     // 360
+
+    // Horizontal bar nodes (going left from player)
+    const newH1 = makeNode('test_h1', 'Outpost Alpha',  BASE_X - H_STEP,     BASE_Y, ['asteroid_mine']);
+    const newH2 = makeNode('test_h2', 'Outpost Beta',   BASE_X - H_STEP * 2, BASE_Y, ['asteroid_mine']);
+    const newH3 = makeNode('test_h3', 'Outpost Gamma',  BASE_X - H_STEP * 3, BASE_Y, ['asteroid_mine']);
+
+    // Vertical stem nodes (going up from h3, the corner of the T)
+    const newV1 = makeNode('test_v1', 'Outpost Delta',   BASE_X - H_STEP * 3, BASE_Y - V_STEP,     ['asteroid_mine']);
+    const newV2 = makeNode('test_v2', 'Outpost Epsilon', BASE_X - H_STEP * 3, BASE_Y - V_STEP * 2, ['asteroid_mine']);
+
+    // Purple planet (player6) at top of stem
+    const purpleNode = makeNode('test_purple', 'Purple Base', BASE_X - H_STEP * 3, BASE_Y - V_STEP * 3, ['naval_base', 'asteroid_mine']);
+
+    this._nodes = [
+      playerNode, neutralNode, enemyNode,
+      enemyNode2, enemyNode3, enemyNode4, enemyNode5, enemyNode6,
+      newH1, newH2, newH3, newV1, newV2, purpleNode,
+    ];
 
     this._edges = [
-      // Original triangle
+      // Original connections
       { from: 'test_player',  to: 'test_neutral' },
       { from: 'test_player',  to: 'test_enemy'   },
       { from: 'test_neutral', to: 'test_enemy'   },
-      // All new enemy planets connect to player
+      // All enemy planets connect to player
       { from: 'test_player',  to: 'test_enemy_2' },
       { from: 'test_player',  to: 'test_enemy_3' },
       { from: 'test_player',  to: 'test_enemy_4' },
       { from: 'test_player',  to: 'test_enemy_5' },
       { from: 'test_player',  to: 'test_enemy_6' },
+      // Upside-down T horizontal bar (player → h1 → h2 → h3)
+      { from: 'test_player', to: 'test_h1' },
+      { from: 'test_h1',     to: 'test_h2' },
+      { from: 'test_h2',     to: 'test_h3' },
+      // Vertical stem up from h3 (h3 → v1 → v2 → purple)
+      { from: 'test_h3',     to: 'test_v1'    },
+      { from: 'test_v1',     to: 'test_v2'    },
+      { from: 'test_v2',     to: 'test_purple' },
     ];
     this._mapW = 1280;
     this._mapH = 720;
@@ -290,17 +322,25 @@ export default class GameScene extends Phaser.Scene {
     this.ownershipGfx = this.add.graphics().setDepth(4);
     this.drawMap();
 
-    // Player: flagship only
+    // ── Spawn units ───────────────────────────────────────────────────────
+    // Player
     this.spawnStack('test_player',  'player',  0, { ...emptyComposition(), flagship: 1 });
-    // Neutral: 10 fighters
+    // Original neutrals and enemies
     this.spawnStack('test_neutral', 'neutral', 0, { ...emptyComposition(), fighter: 10 });
-    // Enemy planets: various compositions
     this.spawnStack('test_enemy',   'player2', 0, { ...emptyComposition(), fighter: 10 });
     this.spawnStack('test_enemy_2', 'player2', 0, { ...emptyComposition(), fighter: 5  });
     this.spawnStack('test_enemy_3', 'player2', 0, { ...emptyComposition(), destroyer: 5 });
     this.spawnStack('test_enemy_4', 'player2', 0, { ...emptyComposition(), cruiser: 5   });
     this.spawnStack('test_enemy_5', 'player2', 0, { ...emptyComposition(), dreadnaught: 3 });
     this.spawnStack('test_enemy_6', 'player2', 0, { ...emptyComposition(), flagship: 1  });
+    // New neutral planets — 10 fighters each
+    this.spawnStack('test_h1',     'neutral', 0, { ...emptyComposition(), fighter: 10 });
+    this.spawnStack('test_h2',     'neutral', 0, { ...emptyComposition(), fighter: 10 });
+    this.spawnStack('test_h3',     'neutral', 0, { ...emptyComposition(), fighter: 10 });
+    this.spawnStack('test_v1',     'neutral', 0, { ...emptyComposition(), fighter: 10 });
+    this.spawnStack('test_v2',     'neutral', 0, { ...emptyComposition(), fighter: 10 });
+    // Purple planet — player6, 10 fighters
+    this.spawnStack('test_purple', 'player6', 0, { ...emptyComposition(), fighter: 10 });
   }
 
   update(time, delta) {
@@ -562,6 +602,10 @@ export default class GameScene extends Phaser.Scene {
   issueMoveOrder(unit, destNodeId) {
     const path = findPath(unit.currentNode, destNodeId, this.adjacency);
     if (!path) return;
+    // Apply Afterburner speed bonus based on current composition
+    unit.speed = this.perkManager
+      ? this.perkManager.getAfterburnerSpeed(unit, 90)
+      : 90;
     unit.assignPath(path);
     this.previewGfx.clear();
     this.deselectAll();

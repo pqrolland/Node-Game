@@ -42,17 +42,17 @@ export const PERK_CATALOGUE = {
   d_07:  { name: 'Ace Pilots',         ships: ['destroyer'],   desc: 'Deals double damage against other Destroyers.' },
   d_08:  { name: 'Dense Formation',    ships: ['destroyer'],   desc: 'Each Destroyer gains +1 attack damage.' },
   d_09:  { name: 'Wingman Protocol',   ships: ['destroyer'],   desc: '10% chance to dodge one hit per Main Strike phase.' },
-  d_10:  { name: 'Hit and Run',        ships: ['destroyer'],   desc: 'May retreat after Pre-Strike without entering Main Strike.' },
+  d_10:  { name: 'Afterburner',         ships: ['destroyer'],   desc: 'Each Destroyer increases stack movement speed by 5%.' },
   // Cruiser tree
   c_01:  { name: 'Field Medics',       ships: ['cruiser'],     desc: 'Repair chance on death increases from 50% to 65%.' },
   c_02:  { name: 'Reinforced Hull',    ships: ['cruiser'],     desc: '+10 HP per Cruiser.' },
   c_03:  { name: 'Nanite Repair',      ships: ['cruiser'],     desc: 'Damaged (not destroyed) Cruisers have a 30% chance to restore to full HP each phase.' },
   c_04:  { name: 'Escort Formation',   ships: ['cruiser'],     desc: 'Absorbs one hit directed at the Flagship per Main Strike round.' },
-  c_05:  { name: 'Regeneration Field', ships: ['cruiser'],     desc: 'Each friendly ship in this stack gains +5 HP.' },
+  c_05:  { name: 'Deflection Field',  ships: ['cruiser'],     desc: 'Each friendly ship in this stack gains +5 HP.' },
   c_06:  { name: 'Hunter Protocol',    ships: ['cruiser'],     desc: '+5 damage against Dreadnaughts and Flagships.' },
   c_07:  { name: 'Ace Pilots',         ships: ['cruiser'],     desc: 'Deals double damage against Destroyers.' },
   c_08:  { name: 'Rapid Scramble',     ships: ['cruiser'],     desc: 'Cruisers launch 30% faster from Cruiser Factories.' },
-  c_09:  { name: 'Shielded Core',      ships: ['cruiser'],     desc: 'Takes −10 damage from Pre-Strike attacks.' },
+  c_09:  { name: 'Flak Defense',        ships: ['cruiser'],     desc: 'Each Cruiser negates 1 random incoming Pre-Strike hit.' },
   c_10:  { name: 'Last Stand',         ships: ['cruiser'],     desc: '+2 damage when the stack is outnumbered.' },
   // Dreadnaught tree
   dr_01: { name: 'Siege Cannons',      ships: ['dreadnaught'], desc: '+5 damage per attack.' },
@@ -68,14 +68,14 @@ export const PERK_CATALOGUE = {
   // Flagship tree
   fl_01: { name: 'Command Aura',       ships: ['all'],         desc: 'All ships in this stack gain +1 attack damage.' },
   fl_02: { name: 'Emergency Shield',   ships: ['flagship'],    desc: 'Survives one lethal hit per battle.' },
-  fl_03: { name: 'Rally Beacon',       ships: ['flagship'],    desc: 'Stacks containing a Flagship move 50% faster.' },
+  fl_03: { name: 'Afterburner',         ships: ['flagship'],    desc: 'Stacks containing a Flagship move 50% faster.' },
   fl_04: { name: 'Reinforced Hull',    ships: ['flagship'],    desc: '+50 HP per Flagship.' },
   fl_05: { name: 'Last Stand',         ships: ['flagship'],    desc: '+10 damage and 1 extra attack when the stack is outnumbered.' },
   fl_06: { name: 'First Strike',       ships: ['flagship'],    desc: 'Gains a Pre-Strike hit of 20 damage.' },
   fl_07: { name: 'Iron Reserve',       ships: ['flagship'],    desc: 'Generates +5 Food, Metal, and Fuel per resource tick.' },
   fl_08: { name: 'Hunter Protocol',    ships: ['flagship'],    desc: '+15 damage against Dreadnaughts and Flagships.' },
   fl_09: { name: 'Naval Construction', ships: ['flagship'],    desc: 'Produces 1 Fighter every 30 seconds.' },
-  fl_10: { name: 'Spearhead',          ships: ['flagship'],    desc: 'Gains a Pre-Strike hit of 10 damage aimed at an enemy Flagship.' },
+  fl_10: { name: 'Spearhead',          ships: ['flagship'],    desc: 'Pre-Strike of 10 damage that prioritizes the enemy Flagship, or a random ship otherwise.' },
   // Econ Buildings — no ship types, never shown in unit tooltips
   eb_01: { name: 'Advanced Farming',   ships: [], desc: 'Farms produce +2 Food per tick instead of +1.' },
   eb_02: { name: 'Efficient Smelting', ships: [], desc: 'Metal Extractors produce +2 Metal per tick.' },
@@ -150,6 +150,44 @@ export default class PerkManager {
   // Returns [{name, desc}] for every perk unlocked by `team` that applies to
   // `shipType`. composition is the stack's composition map (optional) — used
   // to gate 'all' perks (e.g. Command Aura) on flagship presence.
+  // Movement: Afterburner — returns effective speed for a unit
+  // f_03: +2.5% per fighter, d_10: +5% per destroyer, dr_04: +10% per dreadnaught, fl_03: +50% flat with flagship
+  getAfterburnerSpeed(unit, baseSpeed) {
+    let mult = 1.0;
+    if (this._has(unit.team, 'f_03')) {
+      const count = unit.composition?.fighter ?? 0;
+      mult += count * 0.025;
+    }
+    if (this._has(unit.team, 'd_10')) {
+      const count = unit.composition?.destroyer ?? 0;
+      mult += count * 0.05;  // +5% per destroyer
+    }
+    if (this._has(unit.team, 'dr_04')) {
+      const count = unit.composition?.dreadnaught ?? 0;
+      mult += count * 0.10;
+    }
+    if (this._has(unit.team, 'fl_03')) {
+      if ((unit.composition?.flagship ?? 0) > 0) mult += 0.50;
+    }
+    return Math.round(baseSpeed * mult);
+  }
+
+  // Battle start: Regeneration Field — +5 HP to every ship in a cruiser stack
+  applyRegenField(unit) {
+    if (!this._has(unit.team, 'c_05')) return { applied: false };
+    if (!unit.unitHP || !(unit.composition?.cruiser > 0)) return { applied: false };
+    const bonusPerShip = 5;
+    let totalShips = 0;
+    for (const type of Object.keys(unit.unitHP)) {
+      const hps = unit.unitHP[type];
+      if (!hps) continue;
+      for (let i = 0; i < hps.length; i++) {
+        if (hps[i] > 0) { hps[i] += bonusPerShip; totalShips++; }
+      }
+    }
+    return { applied: totalShips > 0, bonusPerShip, totalShips, totalBonus: totalShips * bonusPerShip };
+  }
+
   // Production speed — returns the effective duration for a factory building.
   // Rapid Scramble perks: f_01 (naval_base), d_03 (destroyer_factory),
   //                       c_08 (cruiser_factory), dr_08 (dreadnaught_factory)
@@ -275,6 +313,80 @@ export default class PerkManager {
     return hits;
   }
 
+  // Phase 1: Spearhead — flagship pre-strike targeting enemy flagship first, random otherwise
+  // Returns [{ damage, preferType }] — _stageSpearhead uses preferType for targeting
+  getSpearheadHits(unit) {
+    if (!this._has(unit.team, 'fl_10')) return [];
+    const count = unit.unitHP?.flagship?.filter(h => h > 0).length ?? 0;
+    const hits = [];
+    for (let i = 0; i < count; i++) hits.push({ damage: 10, preferType: 'flagship' });
+    return hits;
+  }
+
+  // Phase 1: Shielded Core — reduce incoming pre-strike damage to cruisers by 10
+  // Phase 1: Flak Defense — negates up to 1 random incoming pre-strike hit per living cruiser
+  // Returns { buf: filteredBuf, negated: count }
+  applyFlakDefense(unit, incomingBuf) {
+    if (!this._has(unit.team, 'c_09')) return { buf: incomingBuf, negated: 0 };
+    const cruiserCount = unit.unitHP?.cruiser?.filter(h => h > 0).length ?? 0;
+    if (cruiserCount === 0 || incomingBuf.length === 0) return { buf: incomingBuf, negated: 0 };
+
+    // Pick up to cruiserCount random indices to negate
+    const indices = incomingBuf.map((_, i) => i).sort(() => Math.random() - 0.5);
+    const negatedIndices = new Set(indices.slice(0, Math.min(cruiserCount, incomingBuf.length)));
+    const buf    = incomingBuf.filter((_, i) => !negatedIndices.has(i));
+    return { buf, negated: negatedIndices.size };
+  }
+
+  // Phase 3: Air Superiority — fighters gain +1 attack per adjacent friendly planet
+  getAirSuperiorityBonus(unit) {
+    if (!this._has(unit.team, 'f_09')) return 0;
+    const nodeId = unit.currentNode;
+    if (!nodeId) return 0;
+    const adj = this._scene.adjacency?.get(nodeId) ?? [];
+    let bonus = 0;
+    for (const neighbourId of adj) {
+      if (this._scene.nodeOwnership?.get(neighbourId) === unit.team) bonus++;
+    }
+    return bonus;
+  }
+
+  // Phase 4: Escort Formation — cruisers absorb hits aimed at flagship
+  // Each living cruiser can absorb 1 hit per round targeted at the flagship.
+  // Distributes redirected hits across different cruisers rather than piling onto one.
+  applyEscortFormation(unit, incomingBuf) {
+    if (!this._has(unit.team, 'c_04')) return { buf: incomingBuf, redirected: 0 };
+    const hps = unit.unitHP?.cruiser;
+    if (!hps) return { buf: incomingBuf, redirected: 0 };
+
+    // Build pool of living cruiser indices — each can absorb one hit this round
+    const availableCruisers = hps.map((h, i) => h > 0 ? i : -1).filter(i => i >= 0);
+    if (availableCruisers.length === 0) return { buf: incomingBuf, redirected: 0 };
+
+    let redirected    = 0;
+    let cruiserCursor = 0;
+    const buf = incomingBuf.map(hit => {
+      if (hit.type !== 'flagship' || cruiserCursor >= availableCruisers.length) return hit;
+      const idx = availableCruisers[cruiserCursor++];
+      redirected++;
+      return { ...hit, type: 'cruiser', idx };
+    });
+    return { buf, redirected };
+  }
+
+  // Battle start: Living Fortress — dreadnaughts defending gain +20 HP (temporary, current HP only)
+  applyLivingFortress(unit) {
+    if (!this._has(unit.team, 'dr_10')) return { applied: false };
+    const hps = unit.unitHP?.dreadnaught;
+    if (!hps || hps.length === 0) return { applied: false };
+    const bonus = 20;
+    let count = 0;
+    for (let i = 0; i < hps.length; i++) {
+      if (hps[i] > 0) { hps[i] += bonus; count++; }
+    }
+    return { applied: count > 0, bonus, count };
+  }
+
   // Phase 1: Interceptor Role — fighters killed by pre-strike retaliate (50% each)
   getInterceptorHits(unit, fighterDeaths) {
     if (!this._has(unit.team, 'f_07') || fighterDeaths === 0) return { hits: [], triggered: 0, total: 0 };
@@ -344,6 +456,11 @@ export default class PerkManager {
 
       // Swarm Tactics — Fighter +1 when stack is pure fighters
       if (type === 'fighter' && pureFighters && this._has(team, 'f_06')) dmg += 1;
+
+      // Air Superiority — Fighter +1 per adjacent friendly planet
+      if (type === 'fighter' && this._has(team, 'f_09')) {
+        dmg += this.getAirSuperiorityBonus(unit);
+      }
 
       // Ace Pilots — double damage when enemy has the relevant type alive
       if (enemyHasDestroyer) {
